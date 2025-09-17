@@ -1,0 +1,17 @@
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+model menti {
+  id       Int          @id @default(autoincrement())
+  username String       @db.VarChar(255)
+  email    String       @db.VarChar(225)
+  password String       @db.Text
+  status   menti_status
+}
+
+enum menti_status {
+  Active
+  Non_Active @map("Non-Active")
+}
