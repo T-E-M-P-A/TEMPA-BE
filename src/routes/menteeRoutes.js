@@ -48,17 +48,17 @@ router.post("/login-mentee", async (req, res) => {
     const signedJwtToken = jwt.sign(
       jwtPayload,
       JWT_SECRET,
-      { expiresIn: "1d" } // Token availlable in 1 day
+      { expiresIn: "1d" } // expired in 1 day
     );
 
     res.status(200).json({
       message: "Login successful!",
       data: {
-        jwtToken: signedJwtToken,
+        token: signedJwtToken,
         fullName: name,
         uniqueId: localUserId,
         email: email,
-        note: "Mantapppp mas broo",
+        // note: "Mantapppp mas broo",
       },
     });
   } catch (error) {
