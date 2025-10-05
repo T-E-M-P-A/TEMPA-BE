@@ -2,10 +2,13 @@ import express, { json } from "express";
 import prisma from "../../prisma/client";
 import bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
+import { authenticateUser } from "../middlewares/auth";
+import { authorizeRoles } from "../middlewares/roles";
 
 const router = express.Router();
 const JWT_SECRET = process.env.JWT_SECRET;
 
+// login admin
 router.post("/admin-login", async (req, res) => {
   const { username, password } = req.body;
 
@@ -64,5 +67,24 @@ router.post("/admin-login", async (req, res) => {
     });
   }
 });
+
+// test midleware
+router.post(
+  "/testing-midleware",
+  authenticateUser,
+  authorizeRoles(["admin"]),
+  async (req, res) => {
+    const { test } = req.body;
+    try {
+      return res.status(200).json({
+        message: "Middleware berhasil",
+      });
+    } catch (error) {
+      return res.json({
+        message: error,
+      });
+    }
+  }
+);
 
 export default router;

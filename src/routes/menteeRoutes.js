@@ -2,6 +2,8 @@ import express from "express";
 import { OAuth2Client } from "google-auth-library";
 import jwt from "jsonwebtoken";
 import { findOrCreateUser } from "../controllers/findOrCreateUser";
+import { authenticateUser } from "../middlewares/auth";
+import { authorizeRoles } from "../middlewares/roles";
 
 const router = express.Router();
 
@@ -39,9 +41,9 @@ router.post("/login-mentee", async (req, res) => {
     const localUserId = userRecord.id;
 
     const jwtPayload = {
-      sub: localUserId, // id user
+      id: localUserId, // id user
+      username: name,
       email: email,
-      name: name,
       role: "mentee",
     };
 
@@ -58,7 +60,6 @@ router.post("/login-mentee", async (req, res) => {
         fullName: name,
         uniqueId: localUserId,
         email: email,
-        // note: "Mantapppp mas broo",
       },
     });
   } catch (error) {
@@ -66,5 +67,25 @@ router.post("/login-mentee", async (req, res) => {
     res.status(401).json({ error: "Authentication failed. Invalid token." });
   }
 });
+
+// test midleware
+router.post(
+  "/testing-midleware-mentee",
+  authenticateUser,
+  authorizeRoles(["mentee"]),
+  async (req, res) => {
+    const { test } = req.body;
+
+    try {
+      return res.status(200).json({
+        message: "Middleware mentee berhasil",
+      });
+    } catch (error) {
+      return res.json({
+        message: error,
+      });
+    }
+  }
+);
 
 export default router;
