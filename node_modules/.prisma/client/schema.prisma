@@ -28,10 +28,10 @@ model admin {
 model mentor {
   id                Int                 @id @default(autoincrement())
   name              String              @db.VarChar(50)
-  email             String              @db.VarChar(225)
-  password          String?             @db.Text
   id_campus         Int
   id_major          Int
+  password          String?             @db.Text
+  nik               Int                 @unique(map: "nik")
   course_instructor course_instructor[]
   campus            campus              @relation(fields: [id_campus], references: [id], onDelete: Cascade, map: "mentor_ibfk_1")
   major             major               @relation(fields: [id_major], references: [id], onDelete: Cascade, map: "mentor_ibfk_2")
@@ -42,13 +42,13 @@ model mentor {
 
 model campus {
   id                  Int                        @id @default(autoincrement())
-  sub_google_id       String                     @unique
   campus_name         String?                    @db.VarChar(225)
   email               String                     @db.VarChar(225)
   password            String?                    @db.Text
   address             String?                    @db.VarChar(225)
   description         String?                    @db.Text
   verification_status verification_status_campus
+  sub_google_id       String                     @unique
   major               major[]
   mentor              mentor[]
 }
