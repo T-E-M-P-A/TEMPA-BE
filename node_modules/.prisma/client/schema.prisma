@@ -29,7 +29,7 @@ model mentor {
   id                Int                 @id @default(autoincrement())
   name              String              @db.VarChar(50)
   email             String              @db.VarChar(225)
-  passwprd          String?             @db.Text
+  password          String?             @db.Text
   id_campus         Int
   id_major          Int
   course_instructor course_instructor[]
@@ -42,11 +42,12 @@ model mentor {
 
 model campus {
   id                  Int                        @id @default(autoincrement())
-  campus_name         String                     @db.VarChar(225)
+  sub_google_id       String                     @unique
+  campus_name         String?                    @db.VarChar(225)
   email               String                     @db.VarChar(225)
   password            String?                    @db.Text
   address             String?                    @db.VarChar(225)
-  description         String                     @db.Text
+  description         String?                    @db.Text
   verification_status verification_status_campus
   major               major[]
   mentor              mentor[]

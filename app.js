@@ -3,6 +3,7 @@ import morgan from "morgan";
 import cors from "cors";
 import menteeRoutes from "./src/routes/menteeRoutes.js";
 import adminRoutes from "./src/routes/adminRoutes.js";
+import campusRoutes from "./src/routes/campusRoute.js";
 
 const app = express();
 const port = 8080;
@@ -21,6 +22,8 @@ app.get("/", (req, res) => {
 app.use("/api/v1", menteeRoutes);
 
 app.use("/api/v1", adminRoutes);
+
+app.use("/api/v1", campusRoutes);
 
 app.listen(port, () => {
   console.log(`Listening on port ${port}...`);
