@@ -1,9 +1,9 @@
 import express from "express";
 import { OAuth2Client } from "google-auth-library";
 import jwt from "jsonwebtoken";
-import { findOrCreateUser } from "../controllers/findOrCreateUser";
-import { authenticateUser } from "../middlewares/auth";
-import { authorizeRoles } from "../middlewares/roles";
+import { findOrCreateUser } from "../controllers/findOrCreateUser.js";
+import authenticateUser from "../middlewares/auth.js";
+import authorizeRoles from "../middlewares/roles.js";
 
 const router = express.Router();
 

@@ -1,4 +1,4 @@
-import prisma from "./../../prisma/client";
+import prisma from "./../../prisma/client.js";
 
 /**
  * @param {object} userData - User data from payload Google

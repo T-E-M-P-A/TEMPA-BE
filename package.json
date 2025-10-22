@@ -17,6 +17,24 @@
     "prisma": "^6.16.2"
   },
   "prisma": {
-    "seed" : "bun prisma/seed.js"
-  }
+    "seed": "bun prisma/seed.js"
+  },
+  "name": "tempa-be",
+  "version": "1.0.0",
+  "type": "module",
+  "description": "",
+  "main": "app.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/T-E-M-P-A/TEMPA-BE.git"
+  },
+  "author": "apipu",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/T-E-M-P-A/TEMPA-BE/issues"
+  },
+  "homepage": "https://github.com/T-E-M-P-A/TEMPA-BE#readme"
 }

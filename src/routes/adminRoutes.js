@@ -1,9 +1,9 @@
 import express, { json } from "express";
-import prisma from "../../prisma/client";
+import prisma from "../../prisma/client.js";
 import bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
-import { authenticateUser } from "../middlewares/auth";
-import { authorizeRoles } from "../middlewares/roles";
+import authenticateUser from "../middlewares/auth.js";
+import authorizeRoles from "../middlewares/roles.js";
 
 const router = express.Router();
 const JWT_SECRET = process.env.JWT_SECRET;

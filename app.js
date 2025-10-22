@@ -1,8 +1,8 @@
 import express from "express";
 import morgan from "morgan";
 import cors from "cors";
-import menteeRoutes from "./src/routes/menteeRoutes";
-import adminRoutes from "./src/routes/adminRoutes";
+import menteeRoutes from "./src/routes/menteeRoutes.js";
+import adminRoutes from "./src/routes/adminRoutes.js";
 
 const app = express();
 const port = 8080;

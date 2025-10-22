@@ -1,9 +1,10 @@
-const jwt = require("jsonwebtoken");
+// const jwt = require("jsonwebtoken");
+import jwt from "jsonwebtoken";
 
 const JWT_SECRET = process.env.JWT_SECRET;
 
 // check token
-exports.authenticateUser = (req, res, next) => {
+const authenticateUser = (req, res, next) => {
   const token = req.header("Authorization")?.replace("Bearer ", "");
 
   if (!token) {
@@ -20,3 +21,5 @@ exports.authenticateUser = (req, res, next) => {
     res.status(401).json({ message: "Token tidak valid atau kedaluwarsa." });
   }
 };
+
+export default authenticateUser;
