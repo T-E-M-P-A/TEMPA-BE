@@ -35,22 +35,25 @@ model mentor {
   course_instructor course_instructor[]
   campus            campus              @relation(fields: [id_campus], references: [id], onDelete: Cascade, map: "mentor_ibfk_1")
   major             major               @relation(fields: [id_major], references: [id], onDelete: Cascade, map: "mentor_ibfk_2")
+  program           program[]
 
   @@index([id_campus, id_major], map: "id_campus")
   @@index([id_major], map: "id_major")
 }
 
 model campus {
-  id                  Int                        @id @default(autoincrement())
-  campus_name         String?                    @db.VarChar(225)
-  email               String                     @db.VarChar(225)
-  password            String?                    @db.Text
-  address             String?                    @db.VarChar(225)
-  description         String?                    @db.Text
-  verification_status verification_status_campus
-  sub_google_id       String                     @unique
-  major               major[]
-  mentor              mentor[]
+  id                                Int                        @id @default(autoincrement())
+  campus_name                       String?                    @db.VarChar(225)
+  email                             String                     @db.VarChar(225)
+  password                          String?                    @db.Text
+  address                           String?                    @db.VarChar(225)
+  description                       String?                    @db.Text
+  verification_status               verification_status_campus
+  sub_google_id                     String                     @unique
+  major                             major[]
+  mentor                            mentor[]
+  program_program_id_campusTocampus program[]                  @relation("program_id_campusTocampus")
+  program_program_id_majorTocampus  program[]                  @relation("program_id_majorTocampus")
 }
 
 model standard_major {
@@ -73,16 +76,27 @@ model major {
 }
 
 model program {
-  id              Int               @id @default(autoincrement())
-  program_name    String            @db.VarChar(225)
-  description     String            @db.Text
-  start_date      DateTime          @db.Date
-  end_date        DateTime          @db.Date
-  create_at       DateTime          @db.Timestamp(0)
-  update_at       DateTime          @db.Timestamp(0)
-  materi          materi[]
-  mentee_progress mentee_progress[]
-  sesi_program    sesi_program[]
+  id                               Int               @id @default(autoincrement())
+  program_name                     String            @db.VarChar(225)
+  description                      String            @db.Text
+  start_date                       DateTime          @db.Date
+  end_date                         DateTime          @db.Date
+  create_at                        DateTime          @db.Timestamp(0)
+  update_at                        DateTime          @db.Timestamp(0)
+  id_campus                        Int
+  id_mentor                        Int
+  id_major                         Int
+  path_gambar                      String?           @db.Text
+  materi                           materi[]
+  mentee_progress                  mentee_progress[]
+  mentor                           mentor            @relation(fields: [id_mentor], references: [id], onDelete: NoAction, map: "program_ibfk_1")
+  campus_program_id_campusTocampus campus            @relation("program_id_campusTocampus", fields: [id_campus], references: [id], onDelete: Cascade, map: "program_ibfk_2")
+  campus_program_id_majorTocampus  campus            @relation("program_id_majorTocampus", fields: [id_major], references: [id], onDelete: Cascade, map: "program_ibfk_3")
+  sesi_program                     sesi_program[]
+
+  @@index([id_campus, id_mentor], map: "id_campus")
+  @@index([id_major], map: "id_major")
+  @@index([id_mentor], map: "id_mentor")
 }
 
 model course_instructor {
@@ -114,8 +128,8 @@ model materi {
 model mentee_progress {
   id                Int                        @id @default(autoincrement())
   completion_status completion_status_progress
-  completion_date   DateTime                   @db.Timestamp(0)
-  final_score       Int
+  completion_date   DateTime?                  @db.Timestamp(0)
+  final_score       Int?
   id_mentee         Int
   id_program        Int
   mentee            mentee                     @relation(fields: [id_mentee], references: [id], onDelete: Cascade, map: "mentee_progress_ibfk_1")
