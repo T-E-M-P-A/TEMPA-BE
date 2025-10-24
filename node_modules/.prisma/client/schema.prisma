@@ -76,23 +76,24 @@ model major {
 }
 
 model program {
-  id                               Int               @id @default(autoincrement())
-  program_name                     String            @db.VarChar(225)
-  description                      String            @db.Text
-  start_date                       DateTime          @db.Date
-  end_date                         DateTime          @db.Date
-  create_at                        DateTime          @db.Timestamp(0)
-  update_at                        DateTime          @db.Timestamp(0)
+  id                               Int                    @id @default(autoincrement())
+  program_name                     String                 @db.VarChar(225)
+  description                      String                 @db.Text
+  start_date                       DateTime               @db.Date
+  end_date                         DateTime               @db.Date
+  create_at                        DateTime               @db.Timestamp(0)
+  update_at                        DateTime               @db.Timestamp(0)
   capacity                         Int
+  program_status                   program_program_status
   id_campus                        Int
   id_mentor                        Int
   id_major                         Int
-  path_gambar                      String?           @db.Text
+  path_gambar                      String?                @db.Text
   materi                           materi[]
   mentee_progress                  mentee_progress[]
-  mentor                           mentor            @relation(fields: [id_mentor], references: [id], onDelete: NoAction, map: "program_ibfk_1")
-  campus_program_id_campusTocampus campus            @relation("program_id_campusTocampus", fields: [id_campus], references: [id], onDelete: Cascade, map: "program_ibfk_2")
-  campus_program_id_majorTocampus  major             @relation("program_id_majorTocampus", fields: [id_major], references: [id], onDelete: Cascade, map: "program_ibfk_3")
+  mentor                           mentor                 @relation(fields: [id_mentor], references: [id], onDelete: NoAction, map: "program_ibfk_1")
+  campus_program_id_campusTocampus campus                 @relation("program_id_campusTocampus", fields: [id_campus], references: [id], onDelete: Cascade, map: "program_ibfk_2")
+  campus_program_id_majorTocampus  major                  @relation("program_id_majorTocampus", fields: [id_major], references: [id], onDelete: Cascade, map: "program_ibfk_3")
   sesi_program                     sesi_program[]
 
   @@index([id_campus, id_mentor], map: "id_campus")
@@ -187,4 +188,9 @@ enum mentee_progress_completion_status {
   completed
   on_going    @map("on going")
   uncompleted
+}
+
+enum program_program_status {
+  open
+  closed
 }

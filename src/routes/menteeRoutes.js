@@ -195,6 +195,81 @@ router.get(
   }
 );
 
+// get all program
+router.get(
+  "/mentee/all-program",
+  authenticateUser,
+  authorizeRoles(["mentee"]),
+  async (req, res) => {
+    try {
+      const getAllProgram = await prisma.program.findMany({
+        include: {
+          sesi_program: true,
+          campus_program_id_campusTocampus: true,
+          campus_program_id_majorTocampus: {
+            include: {
+              standard_major: true, // Asumsikan Anda butuh major_name
+            },
+          },
+        },
+      });
+
+      const formatGetAllProgram = getAllProgram.map((item) => {
+        const rawPath = item.path_gambar;
+        let finalPath = rawPath;
+
+        if (finalPath) {
+          if (finalPath.startsWith("/")) {
+            finalPath = finalPath.substring(1);
+          }
+          if (finalPath.startsWith("uploads/")) {
+            finalPath = finalPath.substring("uploads/".length);
+          }
+        }
+
+        // Menentukan URL gambar akhir
+        const imageUrl = finalPath ? `${BASE_URL}/public/${finalPath}` : null;
+
+        // Menggunakan spread operator (...) untuk menyalin semua properti item,
+        // lalu menimpa/menambahkan properti baru (image_url) dan menghapus path_gambar
+
+        // 1. Ambil semua properti item
+        const newItem = { ...item };
+
+        // 2. Hapus properti path_gambar yang lama (opsional, tapi disarankan)
+        delete newItem.path_gambar;
+
+        // 3. Tambahkan properti image_url yang baru
+        newItem.image_url = imageUrl;
+
+        // 4. Tambahkan/ubah struktur properti relasi sesuai kebutuhan (jika diperlukan)
+        // Contoh: Membuat major_name lebih mudah diakses (opsional)
+        newItem.major_name =
+          item.campus_program_id_majorTocampus?.standard_major?.major_name ||
+          null;
+
+        // Hapus objek relasi yang panjang jika sudah tidak diperlukan
+        delete newItem.campus_program_id_majorTocampus;
+
+        return newItem;
+      });
+      console.log(formatGetAllProgram);
+
+      // Mengirimkan data sebagai respons
+      res.status(200).json({
+        message: "Data Berhasil Dipanggil",
+        data: formatGetAllProgram,
+      });
+    } catch (error) {
+      console.error("Error fetching programs:", error);
+      // Mengirimkan respons error
+      res
+        .status(500)
+        .json({ msg: "Gagal mengambil data program", error: error.message });
+    }
+  }
+);
+
 // test midleware
 router.post(
   "/testing-midleware-mentee",
