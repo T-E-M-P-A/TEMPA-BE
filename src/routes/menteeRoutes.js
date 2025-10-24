@@ -4,6 +4,7 @@ import jwt from "jsonwebtoken";
 import { findOrCreateUser } from "../controllers/findOrCreateUser.js";
 import authenticateUser from "../middlewares/auth.js";
 import authorizeRoles from "../middlewares/roles.js";
+import prisma from "../../prisma/client.js";
 
 const router = express.Router();
 
@@ -11,6 +12,7 @@ const CLIENT_ID = process.env.CLIENT_ID;
 const client = new OAuth2Client(CLIENT_ID);
 
 const JWT_SECRET = process.env.JWT_SECRET;
+const BASE_URL = process.env.API_BASE_URL;
 
 // Oauth mentee with google
 router.post("/login-mentee", async (req, res) => {
@@ -67,6 +69,131 @@ router.post("/login-mentee", async (req, res) => {
     res.status(401).json({ error: "Authentication failed. Invalid token." });
   }
 });
+
+// get the program that the mentee has registered for
+router.get(
+  "/mentee/get-program-mentee",
+  authenticateUser,
+  authorizeRoles(["mentee"]),
+  async (req, res) => {
+    const menteeId = req.user.id;
+
+    try {
+      const menteeProgressWithProgram = await prisma.mentee_progress.findMany({
+        where: {
+          id_mentee: menteeId,
+        },
+        select: {
+          id: true,
+          completion_status: true,
+          final_score: true,
+
+          // get program by id from table program
+          program: {
+            select: {
+              id: true,
+              program_name: true,
+              description: true,
+              start_date: true,
+              end_date: true,
+              id_mentor: true,
+              capacity: true,
+              path_gambar: true,
+
+              // get sesi program
+              sesi_program: {
+                select: {
+                  id: true,
+                  type_sesi: true,
+                  description: true,
+                  sesi_date: true,
+                },
+              },
+
+              // get major program
+              campus_program_id_majorTocampus: {
+                select: {
+                  id: true,
+
+                  // get major name
+                  standard_major: {
+                    select: {
+                      major_name: true,
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+      });
+
+      // Output always array
+      const results = Array.isArray(menteeProgressWithProgram)
+        ? menteeProgressWithProgram
+        : [];
+
+      // if program null
+      if (results.length === 0) {
+        return res
+          .status(404)
+          .json({ message: "Mentee belum terdaftar di program manapun." });
+      }
+
+      const programs = menteeProgressWithProgram.map((item) => {
+        // --- Langkah 1: Logika Pembersihan Path (DIPINDAHKAN KE DALAM) ---
+        const rawPath = item.program.path_gambar;
+        let finalPath = rawPath;
+
+        if (finalPath) {
+          // 1. Bersihkan slash di depan jika ada (Dari '/uploads/...')
+          if (finalPath.startsWith("/")) {
+            finalPath = finalPath.substring(1);
+          }
+
+          // 2. POTONG string "uploads/" di awal path (Karena Express sudah memetakan folder 'uploads')
+          if (finalPath.startsWith("uploads/")) {
+            finalPath = finalPath.substring("uploads/".length);
+          }
+        }
+
+        return {
+          progress_id: item.id,
+          completion_status: item.completion_status,
+          final_score: item.final_score,
+
+          program_details: {
+            id: item.program.id,
+            program_name: item.program.program_name,
+            description: item.program.description,
+            start_date: item.program.start_date,
+            end_date: item.program.end_date,
+            capacity: item.program.capacity,
+
+            // KOREKSI: Gunakan finalPath yang sudah dipotong dan dibersihkan
+            image_url: finalPath ? `${BASE_URL}/public/${finalPath}` : null,
+
+            // Gabungkan data relasi
+            sesi_program: item.program.sesi_program,
+            major_name:
+              item.program.campus_program_id_majorTocampus.standard_major
+                .major_name,
+          },
+        };
+      });
+
+      console.log(programs);
+
+      return res.status(200).json({
+        message: "Daftar program mentee berhasil diambil.",
+        data: programs,
+      });
+    } catch (error) {
+      console.error("Kesalahan saat mengambil data program mentee:", error);
+      return res.status(500).json({ message: "Internal server error." });
+    }
+  }
+);
 
 // test midleware
 router.post(
