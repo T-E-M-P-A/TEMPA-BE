@@ -89,6 +89,7 @@ model program {
   id_mentor                        Int
   id_major                         Int
   path_gambar                      String?                @db.Text
+  benefit                          Json
   materi                           materi[]
   mentee_progress                  mentee_progress[]
   mentor                           mentor                 @relation(fields: [id_mentor], references: [id], onDelete: NoAction, map: "program_ibfk_1")
@@ -142,12 +143,12 @@ model mentee_progress {
 }
 
 model sesi_program {
-  id          Int      @id @default(autoincrement())
-  type_sesi   sesi
-  description String   @db.VarChar(225)
+  id          Int                    @id @default(autoincrement())
+  type_sesi   sesi_program_type_sesi
+  description String                 @db.VarChar(225)
   sesi_date   DateTime
   id_program  Int
-  program     program  @relation(fields: [id_program], references: [id], onDelete: Cascade, map: "sesi_program_ibfk_1")
+  program     program                @relation(fields: [id_program], references: [id], onDelete: Cascade, map: "sesi_program_ibfk_1")
 
   @@index([id_program], map: "id_program")
 }
@@ -161,11 +162,6 @@ enum type_materi {
   file
   video
   kuis
-}
-
-enum sesi {
-  online
-  offline
 }
 
 enum verification_status_campus {
@@ -193,4 +189,9 @@ enum mentee_progress_completion_status {
 enum program_program_status {
   open
   closed
+}
+
+enum sesi_program_type_sesi {
+  online
+  onsite
 }

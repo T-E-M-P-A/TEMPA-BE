@@ -136,7 +136,7 @@ router.get(
       // if program null
       if (results.length === 0) {
         return res
-          .status(404)
+          .status(200)
           .json({ message: "Mentee belum terdaftar di program manapun." });
       }
 
@@ -208,7 +208,7 @@ router.get(
           campus_program_id_campusTocampus: true,
           campus_program_id_majorTocampus: {
             include: {
-              standard_major: true, // Asumsikan Anda butuh major_name
+              standard_major: true,
             },
           },
         },
@@ -230,9 +230,6 @@ router.get(
         // Menentukan URL gambar akhir
         const imageUrl = finalPath ? `${BASE_URL}/public/${finalPath}` : null;
 
-        // Menggunakan spread operator (...) untuk menyalin semua properti item,
-        // lalu menimpa/menambahkan properti baru (image_url) dan menghapus path_gambar
-
         // 1. Ambil semua properti item
         const newItem = { ...item };
 
@@ -247,9 +244,12 @@ router.get(
         newItem.major_name =
           item.campus_program_id_majorTocampus?.standard_major?.major_name ||
           null;
+        newItem.campus_name =
+          item.campus_program_id_campusTocampus?.campus_name || null;
 
         // Hapus objek relasi yang panjang jika sudah tidak diperlukan
         delete newItem.campus_program_id_majorTocampus;
+        delete newItem.campus_program_id_campusTocampus;
 
         return newItem;
       });
@@ -266,6 +266,93 @@ router.get(
       res
         .status(500)
         .json({ msg: "Gagal mengambil data program", error: error.message });
+    }
+  }
+);
+
+// get detail program
+router.get(
+  "/mentee/detail-program/:id",
+  authenticateUser,
+  authorizeRoles(["mentee"]),
+  async (req, res) => {
+    try {
+      const idProgram = req.params.id;
+
+      const detailProgram = await prisma.program.findUnique({
+        where: {
+          id: parseInt(idProgram),
+        },
+        include: {
+          campus_program_id_campusTocampus: {
+            select: {
+              campus_name: true,
+              address: true,
+              email: true,
+            },
+          },
+          mentor: {
+            select: {
+              name: true,
+            },
+          },
+          campus_program_id_majorTocampus: {
+            include: {
+              standard_major: {
+                select: {
+                  major_name: true,
+                },
+              },
+            },
+          },
+          sesi_program: {
+            select: {
+              type_sesi: true,
+              description: true,
+            },
+          },
+        },
+      });
+
+      if (!detailProgram) {
+        // Tangani kasus 404 jika program tidak ditemukan
+        return res.status(404).json({ message: "Program tidak ditemukan." });
+      }
+
+      const item = detailProgram;
+
+      const rawPath = item.path_gambar;
+      let finalPath = rawPath;
+
+      if (finalPath) {
+        if (finalPath.startsWith("/")) {
+          finalPath = finalPath.substring(1);
+        }
+        if (finalPath.startsWith("uploads/")) {
+          finalPath = finalPath.substring("uploads/".length);
+        }
+      }
+
+      // Menentukan URL gambar akhir
+      const imageUrl = finalPath ? `${BASE_URL}/public/${finalPath}` : null;
+
+      const formatGetDetailProgram = { ...item };
+
+      delete formatGetDetailProgram.path_gambar;
+
+      formatGetDetailProgram.image_url = imageUrl;
+
+      console.log(formatGetDetailProgram);
+
+      return res.status(200).json({
+        message: "Detail program ditemukan",
+        data: formatGetDetailProgram,
+      });
+    } catch (error) {
+      console.log(error);
+      return res
+        .status(404)
+        .json({ message: "Not Found due to internal error." });
     }
   }
 );

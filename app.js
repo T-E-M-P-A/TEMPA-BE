@@ -28,10 +28,16 @@ app.get("/", (req, res) => {
 // mentee route
 app.use("/api/v1", menteeRoutes);
 
+// app.get("/api/v1/mentee/check-main-app", (req, res) => {
+//   return res.status(200).json({ message: "Main App Test OK" });
+// });
+// admin route
 app.use("/api/v1", adminRoutes);
 
+// campus route
 app.use("/api/v1", campusRoutes);
 
+// mentor route
 app.use("/api/v1", mentorRoutes);
 
 app.listen(port, () => {
