@@ -5,6 +5,7 @@ import { findOrCreateUser } from "../controllers/findOrCreateUser.js";
 import authenticateUser from "../middlewares/auth.js";
 import authorizeRoles from "../middlewares/roles.js";
 import prisma from "../../prisma/client.js";
+import formatPathToUrl from "../controllers/formatPathUrl.js";
 
 const router = express.Router();
 
@@ -286,9 +287,12 @@ router.get(
         include: {
           campus_program_id_campusTocampus: {
             select: {
+              id: true,
               campus_name: true,
               address: true,
               email: true,
+              path_logo: true,
+              path_banner: true,
             },
           },
           mentor: {
@@ -321,26 +325,36 @@ router.get(
 
       const item = detailProgram;
 
-      const rawPath = item.path_gambar;
-      let finalPath = rawPath;
+      // 1. FORMAT PATH GAMBAR PROGRAM UTAMA
+      // Gunakan fungsi helper untuk memformat path_gambar program
+      const imageUrl = formatPathToUrl(item.path_gambar, BASE_URL);
 
-      if (finalPath) {
-        if (finalPath.startsWith("/")) {
-          finalPath = finalPath.substring(1);
-        }
-        if (finalPath.startsWith("uploads/")) {
-          finalPath = finalPath.substring("uploads/".length);
-        }
-      }
+      // 2. FORMAT PATH GAMBAR KAMPUS
+      const campusData = item.campus_program_id_campusTocampus;
 
-      // Menentukan URL gambar akhir
-      const imageUrl = finalPath ? `${BASE_URL}/public/${finalPath}` : null;
+      // Format path_logo
+      const logoUrl = formatPathToUrl(campusData.path_logo, BASE_URL);
 
+      // Format path_banner
+      const bannerUrl = formatPathToUrl(campusData.path_banner, BASE_URL);
+
+      // 3. BUAT OBJEK HASIL AKHIR (formatGetDetailProgram)
       const formatGetDetailProgram = { ...item };
 
+      // a. Hapus path_gambar lama dan tambahkan image_url baru ke level atas
       delete formatGetDetailProgram.path_gambar;
-
       formatGetDetailProgram.image_url = imageUrl;
+
+      // b. Hapus path_logo dan path_banner lama dan tambahkan URL baru ke properti kampus
+      delete formatGetDetailProgram.campus_program_id_campusTocampus.path_logo;
+      delete formatGetDetailProgram.campus_program_id_campusTocampus
+        .path_banner;
+
+      // Tambahkan URL yang sudah diformat
+      formatGetDetailProgram.campus_program_id_campusTocampus.logo_url =
+        logoUrl;
+      formatGetDetailProgram.campus_program_id_campusTocampus.banner_url =
+        bannerUrl;
 
       console.log(formatGetDetailProgram);
 
@@ -353,6 +367,65 @@ router.get(
       return res
         .status(404)
         .json({ message: "Not Found due to internal error." });
+    }
+  }
+);
+
+// get all campus
+router.get(
+  "/mentee/all-campus",
+  authenticateUser,
+  authorizeRoles(["mentee"]),
+  async (req, res) => {
+    try {
+      const getAllCampus = await prisma.campus.findMany({
+        select: {
+          id: true,
+          campus_name: true,
+          address: true,
+          path_logo: true,
+          path_banner: true,
+        },
+      });
+
+      if (!getAllCampus) {
+        return res.status(404).json({ message: "Data tidak ditemukan" });
+      }
+
+      const formatGetAllCampus = getAllCampus.map((item) => {
+        // get raw path
+        const rawLogo = item.path_logo;
+        const rawBanner = item.path_banner;
+
+        // format using function formatPathToUrl
+        const logoUrl = formatPathToUrl(rawLogo, BASE_URL);
+        const bannerUrl = formatPathToUrl(rawBanner, BASE_URL);
+
+        // copy all data object
+        const newItem = { ...item };
+
+        // delete old path before format
+        delete newItem.path_logo;
+        delete newItem.path_banner;
+
+        // add new path format to the object
+        newItem.logo_url = logoUrl;
+        newItem.banner_url = bannerUrl;
+
+        return newItem;
+      });
+
+      console.log(formatGetAllCampus);
+
+      return res.status(200).json({
+        message: "Data campus ditemukan",
+        data: formatGetAllCampus,
+      });
+    } catch (error) {
+      console.log(error);
+      res
+        .status(500)
+        .json({ msg: "Gagal mengambil data program", error: error.message });
     }
   }
 );
