@@ -205,8 +205,11 @@ router.get(
     try {
       const getAllProgram = await prisma.program.findMany({
         include: {
-          sesi_program: true,
-          campus_program_id_campusTocampus: true,
+          campus_program_id_campusTocampus: {
+            select: {
+              campus_name: true,
+            },
+          },
           campus_program_id_majorTocampus: {
             include: {
               standard_major: true,
@@ -426,6 +429,87 @@ router.get(
       res
         .status(500)
         .json({ msg: "Gagal mengambil data program", error: error.message });
+    }
+  }
+);
+
+// register mentee
+router.post(
+  "/mentee/register-program/:idProgram",
+  authenticateUser,
+  authorizeRoles(["mentee"]),
+  async (req, res) => {
+    const idMentee = req.user.id;
+    const { idProgram } = req.params;
+    const idProgramInt = parseInt(idProgram);
+
+    // Pastikan ID tersedia (validasi awal)
+    if (!idProgram || !idMentee) {
+      // Lebih baik gunakan 400 Bad Request jika parameter hilang
+      return res.status(400).json({
+        message: "ID Program atau ID Mentee tidak ditemukan.",
+      });
+    }
+
+    try {
+      // check if mentee is already register to program
+      const existingEnrollment = await prisma.mentee_progress.findFirst({
+        where: {
+          id_mentee: idMentee,
+          // PERHATIAN: Pastikan Anda menggunakan idProgram, BUKAN idMentee, di sini
+          id_program: idProgramInt,
+        },
+      });
+
+      // if already register program
+      if (existingEnrollment) {
+        console.log(
+          `Mentee ID ${idMentee} sudah terdaftar di Program ID ${idProgramInt}. Pendaftaran dibatalkan`
+        );
+        return res.status(409).json({
+          message: `Anda sudah mendaftar program tersebut!`,
+          data: existingEnrollment,
+        });
+      }
+
+      // check if mentee is already register to program
+      const programClosed = await prisma.program.findFirst({
+        where: {
+          id: idProgramInt,
+          program_status: "closed",
+        },
+      });
+
+      // if program closed
+      if (programClosed) {
+        console.log(`Program sudah tutup/selesai`);
+        return res.status(409).json({
+          message: `Program sudah tutup/selesai!`,
+          data: programClosed,
+        });
+      }
+
+      // register program
+      const registerProgram = await prisma.mentee_progress.create({
+        data: {
+          completion_status: "on_going",
+          completion_date: null,
+          id_mentee: idMentee,
+          id_program: idProgramInt,
+        },
+      });
+      console.log(registerProgram);
+
+      return res.status(201).json({
+        message: `Pendaftaran berhasil!`,
+        data: registerProgram,
+      });
+    } catch (error) {
+      console.error(error);
+      return res.status(500).json({
+        message: "Terjadi kesalahan saat memproses pendaftaran program.",
+        error: error.message,
+      });
     }
   }
 );
