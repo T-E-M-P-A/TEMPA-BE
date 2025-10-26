@@ -47,9 +47,10 @@ model campus {
   email                             String                     @db.VarChar(225)
   password                          String?                    @db.Text
   path_logo                         String?                    @db.Text
-  path_banner                       String                     @db.Text
+  path_banner                       String?                    @db.Text
   address                           String?                    @db.VarChar(225)
   description                       String?                    @db.Text
+  vision_mission                    Json
   verification_status               verification_status_campus
   sub_google_id                     String                     @unique
   major                             major[]
@@ -58,10 +59,11 @@ model campus {
 }
 
 model standard_major {
-  id          Int     @id @default(autoincrement())
-  major_name  String  @db.VarChar(225)
-  description String  @db.Text
-  major       major[]
+  id            Int     @id @default(autoincrement())
+  major_name    String  @db.VarChar(225)
+  description   String  @db.Text
+  prospek_kerja Json
+  major         major[]
 }
 
 model major {
