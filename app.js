@@ -21,16 +21,9 @@ app.use(cors({ origin: "http://localhost:5173" }));
 
 app.use("/public", express.static(path.join(process.cwd(), "uploads"))); // <-- GUNAKAN process.cwd()
 
-app.get("/", (req, res) => {
-  res.send("Hello EduMentor!");
-});
-
 // mentee route
 app.use("/api/v1", menteeRoutes);
 
-// app.get("/api/v1/mentee/check-main-app", (req, res) => {
-//   return res.status(200).json({ message: "Main App Test OK" });
-// });
 // admin route
 app.use("/api/v1", adminRoutes);
 

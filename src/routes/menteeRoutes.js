@@ -434,6 +434,115 @@ router.get(
   }
 );
 
+// get detail campus
+router.get(
+  "/mentee/detail-campus/:id",
+  authenticateUser,
+  authorizeRoles(["mentee"]),
+  async (req, res) => {
+    try {
+      const idCampus = req.params.id;
+
+      const detailCampus = await prisma.campus.findUnique({
+        where: {
+          id: parseInt(idCampus),
+        },
+        select: {
+          id: true,
+          campus_name: true,
+          email: true,
+          path_logo: true,
+          path_banner: true,
+          address: true,
+          description: true,
+          verification_status: false,
+          sub_google_id: false,
+          vision_mission: true,
+          password: false,
+
+          program_program_id_campusTocampus: {
+            select: {
+              id: true,
+              program_name: true,
+              path_gambar: true,
+              description: true,
+              capacity: true,
+              type_sesi: true,
+              program_status: true,
+              start_date: true,
+              sesi_description: true,
+              campus_program_id_majorTocampus: {
+                include: {
+                  standard_major: {
+                    select: {
+                      major_name: true,
+                    },
+                  },
+                },
+              },
+            },
+          },
+          major: {
+            include: {
+              standard_major: true,
+            },
+          },
+        },
+      });
+
+      if (!detailCampus) {
+        return res.status(404).json({ message: "Kampus tidak ditemukan." });
+      }
+
+      let formattedCampus = { ...detailCampus };
+
+      // delete old path_logo and add new url logo_url
+      formattedCampus.logo_url = formatPathToUrl(
+        formattedCampus.path_logo,
+        BASE_URL
+      );
+      delete formattedCampus.path_logo;
+
+      // delete old path_banner and add new url banner_url
+      formattedCampus.banner_url = formatPathToUrl(
+        formattedCampus.path_banner,
+        BASE_URL
+      );
+      delete formattedCampus.path_banner;
+
+      // 🏆 3. FORMAT PATH GAMBAR DI DALAM RELASI PROGRAM (jika ada)
+      if (formattedCampus.program_program_id_campusTocampus) {
+        formattedCampus.program_program_id_campusTocampus =
+          formattedCampus.program_program_id_campusTocampus.map((program) => {
+            // Duplikasi objek program
+            let formattedProgram = { ...program };
+
+            // Format path_gambar program dan hapus path lama
+            formattedProgram.image_url = formatPathToUrl(
+              formattedProgram.path_gambar,
+              BASE_URL
+            );
+            delete formattedProgram.path_gambar;
+
+            return formattedProgram;
+          });
+      }
+
+      console.log(formattedCampus);
+
+      return res.status(200).json({
+        message: "Detail campus ditemukan",
+        data: formattedCampus,
+      });
+    } catch (error) {
+      console.log(error);
+      return res
+        .status(404)
+        .json({ message: "Not Found due to internal error." });
+    }
+  }
+);
+
 // register program for mentee
 router.post(
   "/mentee/register-program/:idProgram",
@@ -543,37 +652,126 @@ router.get(
   }
 );
 
-// test gemini ai
+// get detail majors
 router.get(
-  "/testing-gemini-ai",
+  "/mentee/detail-major/:majorName",
   authenticateUser,
   authorizeRoles(["mentee"]),
   async (req, res) => {
     try {
-      const ai = new GoogleGenAI({});
-      const response = await ai.models.generateContent({
-        model: "gemini-2.5-flash",
-        contents: `Sebagai Konselor Karir Ahli, rekomendasikan 2-3 jurusan kuliah yang paling sesuai untuk profil berikut. Jelaskan mengapa setiap jurusan cocok dan sebutkan 2 contoh profesi yang relevan.
-        [1] Minat Akademik: Bahasa Inggris
-        [2] Aktivitas Luang: merancang poster
-        [3] Dampak Karir: Ingin nge-solve problem yang ada di perusahan
-        [4] Lingkungan Kerja: Bekerja secara mandiri di balik meja
-        [5] Kekuatan Diri: Daya analisis yang tajam
-        [6] Tantangan Disukai: membuat sistem bekerja lebih baik
-        [7] Toleransi Aturan: Lingkungan fleksibel yang menuntut improvisasi dan ide baru
-        [8] Prioritas Gaji (Skala 5): 5
-        [9] Jurusan yang Dipertimbangkan: Belum ada
-        [10] Pendekatan Keputusan: Data, angka, dan fakta yang teruji (pendekatan Kuantitatif)
-        Berikan jawaban dalam format poin-poin yang mudah dibaca.`,
+      const { majorName } = req.params;
+
+      const detailMajor = await prisma.standard_major.findFirst({
+        where: {
+          major_name: majorName,
+        },
+        include: {
+          major: {
+            include: {
+              campus: {
+                select: {
+                  id: true,
+                  campus_name: true,
+                  path_banner: true,
+                },
+              },
+              program_program_id_majorTocampus: {
+                select: {
+                  id: true,
+                  program_name: true,
+                  description: true,
+                  start_date: true,
+                  capacity: true,
+                  path_gambar: true,
+                  type_sesi: true,
+                  program_status: true,
+                  sesi_description: true,
+                  campus_program_id_campusTocampus: {
+                    select: {
+                      campus_name: true,
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
       });
-      console.log(response.text);
+
+      // Cek jika jurusan tidak ditemukan
+      if (!detailMajor) {
+        return res.status(404).json({
+          message: "Jurusan tidak ditemukan",
+          data: null,
+        });
+      }
+
+      if (detailMajor.major && Array.isArray(detailMajor.major)) {
+        detailMajor.major = detailMajor.major.map((majorEntry) => {
+          // format banner campus
+          const rawPath = majorEntry.campus?.path_banner;
+          let updatedMajorEntry = { ...majorEntry };
+
+          if (rawPath) {
+            const bannerUrl = formatPathToUrl(rawPath, BASE_URL);
+
+            const updatedCampus = {
+              ...majorEntry.campus,
+              banner_url: bannerUrl,
+            };
+
+            delete updatedCampus.path_banner;
+
+            updatedMajorEntry = {
+              ...updatedMajorEntry,
+              campus: updatedCampus,
+            };
+          } else {
+            delete updatedMajorEntry.campus?.path_banner;
+          }
+
+          const programs = updatedMajorEntry.program_program_id_majorTocampus;
+
+          // format program image
+          if (programs && Array.isArray(programs)) {
+            updatedMajorEntry.program_program_id_majorTocampus = programs.map(
+              (program) => {
+                const rawProgramPath = program.path_gambar;
+                const updatedProgram = { ...program };
+
+                if (rawProgramPath) {
+                  const programImageUrl = formatPathToUrl(
+                    rawProgramPath,
+                    BASE_URL
+                  );
+
+                  updatedProgram.program_image_url = programImageUrl;
+                }
+
+                // delete raw path_gambar
+                delete updatedProgram.path_gambar;
+
+                return updatedProgram;
+              }
+            );
+          }
+
+          // Kembalikan entri major yang sudah diformat di kedua lapisan
+          return updatedMajorEntry;
+        });
+      }
+
+      console.log(detailMajor);
 
       return res.status(200).json({
-        message: response.text,
+        message: "Detail jurusan berhasil diambil",
+        data: detailMajor,
       });
     } catch (error) {
-      return res.json({
-        message: error,
+      console.error("Kesalahan saat mengambil detail jurusan:", error);
+      return res.status(500).json({
+        message: "Terjadi kesalahan server: " + error.message,
+        error: error,
       });
     }
   }
