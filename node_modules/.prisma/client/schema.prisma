@@ -61,8 +61,8 @@ model campus {
 model standard_major {
   id            Int     @id @default(autoincrement())
   major_name    String  @db.VarChar(225)
-  description   String  @db.Text
-  prospek_kerja Json
+  description   String? @db.Text
+  prospek_kerja Json?
   major         major[]
 }
 

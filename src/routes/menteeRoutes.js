@@ -5,6 +5,7 @@ import { findOrCreateUser } from "../controllers/findOrCreateUser.js";
 import authenticateUser from "../middlewares/auth.js";
 import authorizeRoles from "../middlewares/roles.js";
 import prisma from "../../prisma/client.js";
+import { GoogleGenAI } from "@google/genai";
 import formatPathToUrl from "../controllers/formatPathUrl.js";
 
 const router = express.Router();
@@ -514,111 +515,102 @@ router.post(
   }
 );
 
-// get detail campus
+// get majors
 router.get(
-  "/mentee/detail-campus/:id",
+  "/mentee/all-majors",
   authenticateUser,
   authorizeRoles(["mentee"]),
   async (req, res) => {
     try {
-      const idCampus = req.params.id;
+      const allMajors = await prisma.standard_major.findMany({});
 
-      const detailCampus = await prisma.campus.findUnique({
-        where: {
-          id: parseInt(idCampus),
-        },
-        select: {
-          id: true,
-          campus_name: true,
-          email: true,
-          path_logo: true,
-          path_banner: true,
-          address: true,
-          description: true,
-          verification_status: false,
-          sub_google_id: false,
-          vision_mission: true,
-          password: false,
-
-          program_program_id_campusTocampus: {
-            select: {
-              id: true,
-              program_name: true,
-              path_gambar: true,
-              description: true,
-              capacity: true,
-              type_sesi: true,
-              program_status: true,
-              start_date: true,
-              sesi_description: true,
-              campus_program_id_majorTocampus: {
-                include: {
-                  standard_major: {
-                    select: {
-                      major_name: true,
-                    },
-                  },
-                },
-              },
-            },
-          },
-          major: {
-            include: {
-              standard_major: true,
-            },
-          },
-        },
-      });
-
-      if (!detailCampus) {
-        return res.status(404).json({ message: "Kampus tidak ditemukan." });
+      if (!allMajors) {
+        return res.status(404).json({ message: "Data Jurusan tidak ada." });
       }
 
-      let formattedCampus = { ...detailCampus };
-
-      // delete old path_logo and add new url logo_url
-      formattedCampus.logo_url = formatPathToUrl(
-        formattedCampus.path_logo,
-        BASE_URL
-      );
-      delete formattedCampus.path_logo;
-
-      // delete old path_banner and add new url banner_url
-      formattedCampus.banner_url = formatPathToUrl(
-        formattedCampus.path_banner,
-        BASE_URL
-      );
-      delete formattedCampus.path_banner;
-
-      // 🏆 3. FORMAT PATH GAMBAR DI DALAM RELASI PROGRAM (jika ada)
-      if (formattedCampus.program_program_id_campusTocampus) {
-        formattedCampus.program_program_id_campusTocampus =
-          formattedCampus.program_program_id_campusTocampus.map((program) => {
-            // Duplikasi objek program
-            let formattedProgram = { ...program };
-
-            // Format path_gambar program dan hapus path lama
-            formattedProgram.image_url = formatPathToUrl(
-              formattedProgram.path_gambar,
-              BASE_URL
-            );
-            delete formattedProgram.path_gambar;
-
-            return formattedProgram;
-          });
-      }
-
-      console.log(formattedCampus);
+      console.log(allMajors);
 
       return res.status(200).json({
-        message: "Detail campus ditemukan",
-        data: formattedCampus,
+        message: "Data Jurusan ditemukan",
+        data: allMajors,
       });
     } catch (error) {
       console.log(error);
       return res
-        .status(404)
+        .status(500)
         .json({ message: "Not Found due to internal error." });
+    }
+  }
+);
+
+// test gemini ai
+router.get(
+  "/testing-gemini-ai",
+  authenticateUser,
+  authorizeRoles(["mentee"]),
+  async (req, res) => {
+    try {
+      const ai = new GoogleGenAI({});
+      const response = await ai.models.generateContent({
+        model: "gemini-2.5-flash",
+        contents: `Sebagai Konselor Karir Ahli, rekomendasikan 2-3 jurusan kuliah yang paling sesuai untuk profil berikut. Jelaskan mengapa setiap jurusan cocok dan sebutkan 2 contoh profesi yang relevan.
+        [1] Minat Akademik: Bahasa Inggris
+        [2] Aktivitas Luang: merancang poster
+        [3] Dampak Karir: Ingin nge-solve problem yang ada di perusahan
+        [4] Lingkungan Kerja: Bekerja secara mandiri di balik meja
+        [5] Kekuatan Diri: Daya analisis yang tajam
+        [6] Tantangan Disukai: membuat sistem bekerja lebih baik
+        [7] Toleransi Aturan: Lingkungan fleksibel yang menuntut improvisasi dan ide baru
+        [8] Prioritas Gaji (Skala 5): 5
+        [9] Jurusan yang Dipertimbangkan: Belum ada
+        [10] Pendekatan Keputusan: Data, angka, dan fakta yang teruji (pendekatan Kuantitatif)
+        Berikan jawaban dalam format poin-poin yang mudah dibaca.`,
+      });
+      console.log(response.text);
+
+      return res.status(200).json({
+        message: response.text,
+      });
+    } catch (error) {
+      return res.json({
+        message: error,
+      });
+    }
+  }
+);
+
+// test gemini ai
+router.get(
+  "/testing-gemini-ai",
+  authenticateUser,
+  authorizeRoles(["mentee"]),
+  async (req, res) => {
+    try {
+      const ai = new GoogleGenAI({});
+      const response = await ai.models.generateContent({
+        model: "gemini-2.5-flash",
+        contents: `Sebagai Konselor Karir Ahli, rekomendasikan 2-3 jurusan kuliah yang paling sesuai untuk profil berikut. Jelaskan mengapa setiap jurusan cocok dan sebutkan 2 contoh profesi yang relevan.
+        [1] Minat Akademik: Bahasa Inggris
+        [2] Aktivitas Luang: merancang poster
+        [3] Dampak Karir: Ingin nge-solve problem yang ada di perusahan
+        [4] Lingkungan Kerja: Bekerja secara mandiri di balik meja
+        [5] Kekuatan Diri: Daya analisis yang tajam
+        [6] Tantangan Disukai: membuat sistem bekerja lebih baik
+        [7] Toleransi Aturan: Lingkungan fleksibel yang menuntut improvisasi dan ide baru
+        [8] Prioritas Gaji (Skala 5): 5
+        [9] Jurusan yang Dipertimbangkan: Belum ada
+        [10] Pendekatan Keputusan: Data, angka, dan fakta yang teruji (pendekatan Kuantitatif)
+        Berikan jawaban dalam format poin-poin yang mudah dibaca.`,
+      });
+      console.log(response.text);
+
+      return res.status(200).json({
+        message: response.text,
+      });
+    } catch (error) {
+      return res.json({
+        message: error,
+      });
     }
   }
 );
