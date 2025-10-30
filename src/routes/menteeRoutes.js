@@ -777,37 +777,132 @@ router.get(
   }
 );
 
-// test gemini ai
-router.get(
-  "/testing-gemini-ai",
+// Anda HARUS mengubah ini dari router.get menjadi router.post
+router.post(
+  "/mentee/recomendation-major",
   authenticateUser,
   authorizeRoles(["mentee"]),
   async (req, res) => {
     try {
+      const { q1, q2, q3, q4, q5, q6, q7, q8, q9, q10 } = req.body;
+
+      const requiredFields = [
+        { key: "q1", name: "Minat Akademik Inti" },
+        { key: "q2", name: "Aktivitas Pilihan" },
+        { key: "q3", name: "Motivasi Karir" },
+        { key: "q4", name: "Preferensi Lingkungan Kerja" },
+        { key: "q5", name: "Kekuatan Diri" },
+        { key: "q6", name: "Tantangan yang Disukai" },
+        { key: "q7", name: "Toleransi Risiko & Aturan" },
+        { key: "q8", name: "Pentingnya Gaji (Skala 1-5)" },
+        { key: "q9", name: "Jurusan yang Sudah Ada di Pikiran" },
+        { key: "q10", name: "Data Kuantitatif/Kualitatif" },
+      ];
+
+      const missingFields = [];
+
+      requiredFields.forEach((field) => {
+        const value = req.body[field.key];
+
+        // if null, undefined, or string null
+        if (
+          value === null ||
+          value === undefined ||
+          (typeof value === "string" && value.trim() === "")
+        ) {
+          missingFields.push(field.name);
+        }
+      });
+
+      if (missingFields.length > 0) {
+        return res.status(400).json({
+          message: "Validasi Gagal: Semua pertanyaan wajib diisi.",
+          details: `Pertanyaan yang belum terjawab: ${missingFields.join(
+            ", "
+          )}`,
+          missingFields: missingFields,
+        });
+      }
+
+      // get all data majors for ai
+      const majors = await prisma.standard_major.findMany({
+        select: {
+          major_name: true,
+        },
+      });
+
+      // conversion result from majors to string/array for AI
+      const availableMajors = majors.map((m) => m.major_name).join(", ");
+
+      // Buat prompt
+      const userProfile = `
+        [1] Minat Akademik Inti: ${q1}
+        [2] Aktivitas Pilihan: ${q2}
+        [3] Motivasi Karir: ${q3}
+        [4] Preferensi Lingkungan Kerja: ${q4}
+        [5] Kekuatan Diri: ${q5}
+        [6] Tantangan yang Disukai: ${q6}
+        [7] Toleransi Risiko & Aturan: ${q7}
+        [8] Pentingnya Gaji (Skala 1-5): ${q8}
+        [9] Jurusan yang Sudah Ada di Pikiran: ${q9}
+        [10] Data Kuantitatif/Kualitatif: ${q10}
+      `;
+
+      const systemInstruction = `Anda adalah Konselor Karir Ahli di Indonesia. Tugas Anda adalah menganalisis profil pengguna berikut dan merekomendasikan 2 hingga 3 jurusan kuliah yang paling sesuai.
+
+        Anda harus membatasi rekomendasi hanya pada jurusan yang tersedia dalam daftar berikut: ${availableMajors}.
+
+        Berikan keluaran Anda dalam format JSON array of objects dengan struktur ini:
+        [
+          {
+            "jurusan": "Nama Jurusan (HARUS ada di daftar yang tersedia)",
+            "kesesuaian": "Penjelasan ringkas (1-2 kalimat) mengapa jurusan ini cocok dengan profil pengguna.",
+            "profesi_relevan": ["Profesi A", "Profesi B"]
+          },
+          // ... objek kedua
+          // ... objek ketiga (opsional)
+        ]
+        `;
+
+      // get eai
       const ai = new GoogleGenAI({});
       const response = await ai.models.generateContent({
         model: "gemini-2.5-flash",
-        contents: `Sebagai Konselor Karir Ahli, rekomendasikan 2-3 jurusan kuliah yang paling sesuai untuk profil berikut. Jelaskan mengapa setiap jurusan cocok dan sebutkan 2 contoh profesi yang relevan.
-        [1] Minat Akademik: Bahasa Inggris
-        [2] Aktivitas Luang: merancang poster
-        [3] Dampak Karir: Ingin nge-solve problem yang ada di perusahan
-        [4] Lingkungan Kerja: Bekerja secara mandiri di balik meja
-        [5] Kekuatan Diri: Daya analisis yang tajam
-        [6] Tantangan Disukai: membuat sistem bekerja lebih baik
-        [7] Toleransi Aturan: Lingkungan fleksibel yang menuntut improvisasi dan ide baru
-        [8] Prioritas Gaji (Skala 5): 5
-        [9] Jurusan yang Dipertimbangkan: Belum ada
-        [10] Pendekatan Keputusan: Data, angka, dan fakta yang teruji (pendekatan Kuantitatif)
-        Berikan jawaban dalam format poin-poin yang mudah dibaca.`,
+        // input from user
+        contents: userProfile,
+        config: {
+          responseMimeType: "application/json", // response json
+          responseSchema: {
+            type: "ARRAY",
+            items: {
+              type: "OBJECT",
+              properties: {
+                jurusan: { type: "STRING" },
+                kesesuaian: { type: "STRING" },
+                profesi_relevan: { type: "ARRAY", items: { type: "STRING" } },
+              },
+            },
+          },
+          // input instruction system
+          systemInstruction: {
+            parts: [{ text: systemInstruction }],
+          },
+        },
       });
-      console.log(response.text);
+
+      const aiRecommendations = JSON.parse(response.text);
+
+      console.log("Rekomendasi AI:", aiRecommendations);
 
       return res.status(200).json({
-        message: response.text,
+        message: "Rekomendasi jurusan berhasil dibuat.",
+        data: aiRecommendations,
       });
     } catch (error) {
-      return res.json({
-        message: error,
+      console.error("Kesalahan saat memproses tes:", error);
+      return res.status(500).json({
+        message: "Terjadi kesalahan internal saat memproses tes.",
+        error: error.message,
       });
     }
   }
