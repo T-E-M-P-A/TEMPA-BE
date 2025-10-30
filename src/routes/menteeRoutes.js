@@ -7,6 +7,7 @@ import authorizeRoles from "../middlewares/roles.js";
 import prisma from "../../prisma/client.js";
 import { GoogleGenAI } from "@google/genai";
 import formatPathToUrl from "../controllers/formatPathUrl.js";
+import generateContentWithRetry from "../controllers/generateContentWithRetry.js";
 
 const router = express.Router();
 
@@ -784,7 +785,22 @@ router.post(
   authorizeRoles(["mentee"]),
   async (req, res) => {
     try {
+      const menteeId = req.user.id;
       const { q1, q2, q3, q4, q5, q6, q7, q8, q9, q10 } = req.body;
+
+      const checkResponse = await prisma.recomdation_majors.findFirst({
+        where: {
+          id_mentee: menteeId,
+        },
+      });
+
+      // check if mentee already assign form
+      if (checkResponse) {
+        return res.status(403).json({
+          message:
+            "Akses Ditolak. Anda hanya diizinkan mengisi tes jurusan satu kali!",
+        });
+      }
 
       const requiredFields = [
         { key: "q1", name: "Minat Akademik Inti" },
@@ -864,33 +880,38 @@ router.post(
         ]
         `;
 
-      // get eai
-      const ai = new GoogleGenAI({});
-      const response = await ai.models.generateContent({
-        model: "gemini-2.5-flash",
-        // input from user
-        contents: userProfile,
-        config: {
-          responseMimeType: "application/json", // response json
-          responseSchema: {
-            type: "ARRAY",
-            items: {
-              type: "OBJECT",
-              properties: {
-                jurusan: { type: "STRING" },
-                kesesuaian: { type: "STRING" },
-                profesi_relevan: { type: "ARRAY", items: { type: "STRING" } },
-              },
+      // config for respons JSON
+      const modelConfig = {
+        responseMimeType: "application/json",
+        responseSchema: {
+          type: "ARRAY",
+          items: {
+            type: "OBJECT",
+            properties: {
+              jurusan: { type: "STRING" },
+              kesesuaian: { type: "STRING" },
+              profesi_relevan: { type: "ARRAY", items: { type: "STRING" } },
             },
           },
-          // input instruction system
-          systemInstruction: {
-            parts: [{ text: systemInstruction }],
-          },
         },
-      });
+      };
+
+      // get eai
+      const response = await generateContentWithRetry(
+        modelConfig,
+        userProfile,
+        systemInstruction
+      );
 
       const aiRecommendations = JSON.parse(response.text);
+
+      // save response to database
+      const saveResponseAi = await prisma.recomdation_majors.create({
+        data: {
+          response_ai: aiRecommendations,
+          id_mentee: menteeId,
+        },
+      });
 
       console.log("Rekomendasi AI:", aiRecommendations);
 
@@ -899,9 +920,19 @@ router.post(
         data: aiRecommendations,
       });
     } catch (error) {
-      console.error("Kesalahan saat memproses tes:", error);
+      // Penanganan error umum, yang juga akan menangani error setelah MAX_RETRIES
+      console.error("Kesalahan saat memproses rekomendasi AI..", error);
+
+      let errorMessage =
+        "Terjadi kesalahan internal saat memproses rekomendasi.";
+
+      // Jika error berasal dari retry logic yang gagal
+      if (error.message.includes("Gagal mendapatkan rekomendasi AI")) {
+        errorMessage = error.message;
+      }
+
       return res.status(500).json({
-        message: "Terjadi kesalahan internal saat memproses tes.",
+        message: errorMessage,
         error: error.message,
       });
     }
