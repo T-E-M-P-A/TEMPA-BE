@@ -777,7 +777,7 @@ router.get(
   }
 );
 
-// Anda HARUS mengubah ini dari router.get menjadi router.post
+// recomendation majors
 router.post(
   "/mentee/recomendation-major",
   authenticateUser,
