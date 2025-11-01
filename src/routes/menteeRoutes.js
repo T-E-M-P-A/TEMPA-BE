@@ -788,7 +788,7 @@ router.post(
       const menteeId = req.user.id;
       const { q1, q2, q3, q4, q5, q6, q7, q8, q9, q10 } = req.body;
 
-      const checkResponse = await prisma.recomdation_majors.findFirst({
+      const checkResponse = await prisma.recomendation_majors.findFirst({
         where: {
           id_mentee: menteeId,
         },
@@ -906,7 +906,7 @@ router.post(
       const aiRecommendations = JSON.parse(response.text);
 
       // save response to database
-      const saveResponseAi = await prisma.recomdation_majors.create({
+      const saveResponseAi = await prisma.recomendation_majors.create({
         data: {
           response_ai: aiRecommendations,
           id_mentee: menteeId,
@@ -933,6 +933,45 @@ router.post(
 
       return res.status(500).json({
         message: errorMessage,
+        error: error.message,
+      });
+    }
+  }
+);
+
+// get response ai from databse if mentee already assign form
+router.get(
+  "/mentee/get-response",
+  authenticateUser,
+  authorizeRoles(["mentee"]),
+  async (req, res) => {
+    try {
+      const menteeId = req.user.id;
+
+      const getResponse = await prisma.recomendation_majors.findFirst({
+        where: {
+          id_mentee: menteeId,
+        },
+        select: {
+          response_ai: true,
+        },
+      });
+
+      console.log(getResponse);
+
+      if (!getResponse) {
+        return res.status(404).json({
+          message: "Anda belum mengisi form",
+        });
+      }
+
+      return res.status(200).json({
+        message: "get response berhasil",
+        data: getResponse,
+      });
+    } catch (error) {
+      return res.status(500).json({
+        message: "Server sedang bermasalahan",
         error: error.message,
       });
     }

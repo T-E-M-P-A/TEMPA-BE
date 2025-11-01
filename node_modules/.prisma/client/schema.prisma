@@ -8,16 +8,16 @@ datasource db {
 }
 
 model mentee {
-  id                 Int                  @id @default(autoincrement())
-  sub_google_id      String               @unique
-  username           String               @db.VarChar(255)
-  email              String               @unique @db.VarChar(225)
-  password           String?              @db.Text
-  status             mentee_status?
-  address            String?              @db.VarChar(225)
-  gender             gender?
-  mentee_progress    mentee_progress[]
-  recomdation_majors recomdation_majors[]
+  id                   Int                    @id @default(autoincrement())
+  sub_google_id        String                 @unique
+  username             String                 @db.VarChar(255)
+  email                String                 @unique @db.VarChar(225)
+  password             String?                @db.Text
+  status               mentee_status?
+  address              String?                @db.VarChar(225)
+  gender               gender?
+  mentee_progress      mentee_progress[]
+  recomendation_majors recomendation_majors[]
 }
 
 model admin {
@@ -163,11 +163,11 @@ model sesi_program {
   @@index([id_program], map: "id_program")
 }
 
-model recomdation_majors {
+model recomendation_majors {
   id          Int    @id @default(autoincrement())
   response_ai Json?
   id_mentee   Int
-  mentee      mentee @relation(fields: [id_mentee], references: [id], onDelete: Cascade, map: "recomdation_majors_ibfk_1")
+  mentee      mentee @relation(fields: [id_mentee], references: [id], onDelete: Cascade, map: "recomendation_majors_ibfk_1")
 
   @@index([id_mentee], map: "id_mentee")
 }
