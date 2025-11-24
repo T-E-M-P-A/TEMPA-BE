@@ -978,6 +978,132 @@ router.get(
   }
 );
 
+// get materi mentee
+router.get(
+  "/mentee/get-materi/:id_program",
+  authenticateUser,
+  authorizeRoles(["mentee"]),
+  async (req, res) => {
+    // Pastikan idProgram adalah integer
+    const idProgram = parseInt(req.params.id_program);
+
+    // Cek apakah parsing berhasil
+    if (isNaN(idProgram)) {
+      return res.status(400).json({
+        message: "ID Program tidak valid.",
+      });
+    }
+
+    try {
+      // 1. UPDATE Kueri Prisma: Sertakan relasi 'materi_resource'
+      const materiList = await prisma.materi.findMany({
+        where: {
+          id_program: idProgram,
+          visibility: "public",
+        },
+        include: {
+          program: {
+            select: {
+              program_name: true,
+              description: true,
+            },
+          },
+          // Sertakan semua resource (file/video/kuis) untuk setiap materi
+          materi_resource: true,
+        },
+        orderBy: {
+          create_at: "asc",
+        },
+      });
+
+      if (materiList.length === 0) {
+        // Ambil detail program secara terpisah
+        const programData = await prisma.program.findUnique({
+          where: {
+            id: idProgram,
+          },
+          select: {
+            program_name: true,
+            description: true,
+          },
+        });
+
+        // Cek jika program itu sendiri tidak ditemukan
+        if (!programData) {
+          return res.status(404).json({
+            message: "Program tidak ditemukan.",
+          });
+        }
+
+        // Jika program ditemukan tapi materinya kosong, kirim detail program dengan array materi kosong
+        return res.status(200).json({
+          message: "Materi belum ditambahkan untuk program ini.",
+          // Kirim data yang dibutuhkan frontend untuk header
+          data: [
+            {
+              program_name: programData.program_name,
+              program_description: programData.description,
+              resources: [],
+              // Berikan properti materi minimal agar frontend bisa membaca
+              title: null,
+              description: null,
+              id: null,
+            },
+          ],
+        });
+      }
+
+      // 2. UPDATE Logika Pemformatan: Pindahkan path_file ke resource
+      const formattedMateriPath = materiList.map((item) => {
+        // Ambil data program untuk dipindahkan ke tingkat atas
+        const { program, materi_resource, ...materiData } = item;
+
+        // Map dan format path_file untuk SETIAP resource
+        const formattedResources = materi_resource.map((resource) => {
+          const rawPathFile = resource.path_file;
+          const fileUrl = formatPathToUrl(rawPathFile, BASE_URL);
+
+          return {
+            ...resource,
+            file_url: fileUrl, // Tambahkan URL yang sudah diformat
+            // Hapus path_file mentah dari objek resource jika perlu
+            // delete resource.path_file;
+          };
+        });
+
+        // Gabungkan semua data yang dibutuhkan
+        const newItem = {
+          ...materiData,
+          program_name: program.program_name,
+          program_description: program.description,
+          resources: formattedResources, // Masukkan resource yang sudah diformat
+        };
+
+        // Hapus objek program yang sudah diekstrak
+        delete newItem.program;
+
+        return newItem;
+      });
+
+      console.log(formattedMateriPath);
+
+      // 3. Beri respons sukses
+      return res.status(200).json({
+        message: `Materi untuk program ID ${idProgram} berhasil didapatkan`,
+        data: formattedMateriPath,
+      });
+    } catch (error) {
+      console.error("Gagal mengambil materi:", error);
+
+      // 4. Tangani error database atau server
+      return res.status(500).json({
+        message: "Terjadi kesalahan saat mengambil data materi.",
+        error: error.message,
+      });
+    }
+  }
+);
+
 // test midleware
 router.post(
   "/testing-midleware-mentee",

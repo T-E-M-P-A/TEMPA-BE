@@ -126,7 +126,6 @@ model course_instructor {
 model materi {
   id                Int                 @id @default(autoincrement())
   title             String              @db.VarChar(60)
-  type              type_materi
   description       String              @db.Text
   create_at         DateTime            @db.Timestamp(0)
   update_at         DateTime            @db.Timestamp(0)
@@ -134,6 +133,7 @@ model materi {
   id_program        Int
   course_instructor course_instructor[]
   program           program             @relation(fields: [id_program], references: [id], onDelete: Cascade, map: "materi_ibfk_1")
+  materi_resource   materi_resource[]
 
   @@index([id_program], map: "id_mentor")
 }
@@ -172,15 +172,19 @@ model recomendation_majors {
   @@index([id_mentee], map: "id_mentee")
 }
 
+model materi_resource {
+  id        Int                  @id @default(autoincrement())
+  type      materi_resource_type
+  path_file String               @db.Text
+  id_materi Int
+  materi    materi               @relation(fields: [id_materi], references: [id], onDelete: Cascade, map: "materi_resource_ibfk_1")
+
+  @@index([id_materi], map: "id_materi")
+}
+
 enum visibility_materi {
   private
   public
-}
-
-enum type_materi {
-  file
-  video
-  kuis
 }
 
 enum verification_status_campus {
@@ -218,4 +222,10 @@ enum sesi_program_type_sesi {
 enum program_type_sesi {
   online
   onsite
+}
+
+enum materi_resource_type {
+  file
+  kuis
+  video
 }
