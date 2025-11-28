@@ -88,6 +88,125 @@ router.post("/login-campus", async (req, res) => {
   }
 });
 
+// register mitra campus
+router.post(
+  "/register-mitra-campus",
+  authenticateUser,
+  authorizeRoles(["campus"]),
+  async (req, res) => {
+    const {
+      campusName,
+      emailCampus,
+      description,
+      websiteCampus,
+      province,
+      city,
+      subdistrict,
+      ward,
+      lat,
+      lng,
+    } = req.body;
+    const idCampus = req.user.id;
+
+    // DAFTAR SEMUA FIELD WAJIB (Termasuk yang sebelumnya opsional)
+    const requiredFields = [
+      "campusName",
+      "emailCampus",
+      "description",
+      "websiteCampus",
+      "province",
+      "city",
+      "subdistrict",
+      "ward",
+      "lat",
+      "lng",
+    ];
+
+    // check if req is null
+    for (const field of requiredFields) {
+      const value = req.body[field];
+
+      if (
+        value === undefined ||
+        value === null ||
+        (typeof value === "string" && value.trim() === "")
+      ) {
+        return res.status(400).json({
+          // 400 Bad Request
+          message: `Gagal: Kolom '${field}' wajib diisi dan tidak boleh kosong.`,
+        });
+      }
+    }
+
+    // check format email
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(emailCampus)) {
+      return res.status(400).json({
+        message: "Gagal: Format email tidak valid.",
+      });
+    }
+
+    try {
+      // convertion to float
+      const parsedLat = parseFloat(lat);
+      const parsedLng = parseFloat(lng);
+
+      // check if lat and lng value is float
+      if (isNaN(parsedLat) || isNaN(parsedLng)) {
+        return res.status(400).json({
+          message:
+            "Gagal: Latitude (lat) dan Longitude (lng) harus berupa angka yang valid.",
+        });
+      }
+
+      const saveDataCampus = await prisma.campus.update({
+        where: {
+          id: idCampus,
+        },
+        data: {
+          campus_name: campusName,
+          email_campus: emailCampus,
+          description: description,
+          website_campus: websiteCampus,
+          province: province,
+          city: city,
+          subdistrict: subdistrict,
+          ward: ward,
+          lat: parsedLat,
+          lng: parsedLng,
+        },
+      });
+
+      return res.status(200).json({
+        message: "Campus Berhasil Register (Update Data)",
+        data: saveDataCampus,
+      });
+    } catch (error) {
+      console.error("Prisma Error:", error);
+
+      // error unique email
+      if (error.code === "P2002") {
+        return res.status(409).json({
+          message: "Email kampus sudah terdaftar (pelanggaran unik).",
+        });
+      }
+      // error validation input
+      if (error.name === "PrismaClientValidationError") {
+        return res.status(400).json({
+          message:
+            "Kesalahan validasi input data. Cek fields yang wajib diisi.",
+          details: error.message,
+        });
+      }
+
+      return res.status(500).json({
+        message: "Terjadi kesalahan server saat menyimpan data.",
+        error: error.message,
+      });
+    }
+  }
+);
+
 // test midleware
 router.post(
   "/testing-midleware-campus",

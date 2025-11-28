@@ -52,11 +52,12 @@ model campus {
   address                           String?                    @db.VarChar(225)
   description                       String?                    @db.Text
   vision_mission                    Json
+  email_campus                      String?                    @db.VarChar(225)
   website_campus                    String?                    @db.VarChar(225)
   province                          String?                    @db.VarChar(225)
   city                              String?                    @db.VarChar(225)
   subdistrict                       String?                    @db.VarChar(225)
-  Ward                              String?                    @db.VarChar(225)
+  ward                              String?                    @db.VarChar(225)
   lat                               Float?                     @db.Float
   lng                               Float?                     @db.Float
   verification_status               verification_status_campus
