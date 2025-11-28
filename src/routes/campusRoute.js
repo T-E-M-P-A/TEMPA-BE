@@ -4,6 +4,7 @@ import jwt from "jsonwebtoken";
 import { findOrCreateCampus } from "../controllers/findOrCreateUser.js";
 import authenticateUser from "../middlewares/auth.js";
 import authorizeRoles from "../middlewares/roles.js";
+import prisma from "../../prisma/client.js";
 
 const router = express.Router();
 
@@ -37,16 +38,35 @@ router.post("/login-campus", async (req, res) => {
     // get id user or add user
     const userRecord = await findOrCreateCampus(payload);
 
-    // get user
+    // get user ID
     const localUserId = userRecord.id;
+
+    const verifData = await prisma.campus.findFirst({
+      where: {
+        id: localUserId,
+      },
+      select: {
+        lat: true,
+        lng: true,
+      },
+    });
+
+    let isVerified = false;
+
+    // check if verif data null return false
+    if (verifData && verifData.lat !== null && verifData.lng !== null) {
+      isVerified = true;
+    }
 
     const jwtPayload = {
       id: localUserId, // id user
       username: name,
       email: email,
       role: "campus",
+      verif: isVerified,
     };
 
+    // Buat token JWT
     const signedJwtToken = jwt.sign(
       jwtPayload,
       JWT_SECRET,
