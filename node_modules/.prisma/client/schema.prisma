@@ -60,7 +60,7 @@ model campus {
   ward                              String?                    @db.VarChar(225)
   lat                               Float?                     @db.Float
   lng                               Float?                     @db.Float
-  verification_status               verification_status_campus
+  verification_status               campus_verification_status
   sub_google_id                     String                     @unique
   major                             major[]
   mentor                            mentor[]
@@ -195,12 +195,6 @@ enum visibility_materi {
   public
 }
 
-enum verification_status_campus {
-  accepted
-  pending
-  rejected
-}
-
 enum gender {
   Male
   Female
@@ -236,4 +230,11 @@ enum materi_resource_type {
   file
   kuis
   video
+}
+
+enum campus_verification_status {
+  accepted
+  pending
+  rejected
+  null
 }

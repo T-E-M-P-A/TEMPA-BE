@@ -46,24 +46,19 @@ router.post("/login-campus", async (req, res) => {
         id: localUserId,
       },
       select: {
-        lat: true,
-        lng: true,
+        verification_status: true,
+        campus_name: true,
       },
     });
 
-    let isVerified = false;
-
-    // check if verif data null return false
-    if (verifData && verifData.lat !== null && verifData.lng !== null) {
-      isVerified = true;
-    }
+    console.log(verifData);
 
     const jwtPayload = {
       id: localUserId, // id user
       username: name,
       email: email,
       role: "campus",
-      verif: isVerified,
+      verif: verifData,
     };
 
     // Buat token JWT
@@ -108,7 +103,6 @@ router.post(
     } = req.body;
     const idCampus = req.user.id;
 
-    // DAFTAR SEMUA FIELD WAJIB (Termasuk yang sebelumnya opsional)
     const requiredFields = [
       "campusName",
       "emailCampus",
@@ -177,8 +171,17 @@ router.post(
         },
       });
 
+      const changeVerificationStatus = await prisma.campus.update({
+        where: {
+          id: idCampus,
+        },
+        data: {
+          verification_status: "pending",
+        },
+      });
+
       return res.status(200).json({
-        message: "Campus Berhasil Register (Update Data)",
+        message: "Campus Berhasil Register",
         data: saveDataCampus,
       });
     } catch (error) {
@@ -202,6 +205,38 @@ router.post(
       return res.status(500).json({
         message: "Terjadi kesalahan server saat menyimpan data.",
         error: error.message,
+      });
+    }
+  }
+);
+
+// check verification status campus
+router.get(
+  "/check-verification-status",
+  authenticateUser,
+  authorizeRoles(["campus"]),
+  async (req, res) => {
+    const idCampus = req.user.id;
+
+    try {
+      const getVerification = await prisma.campus.findFirst({
+        where: {
+          id: idCampus,
+        },
+        select: {
+          verification_status: true,
+        },
+      });
+
+      console.log(getVerification);
+
+      return res.status(200).json({
+        message: "Data berhasil didapatkan",
+        data: getVerification,
+      });
+    } catch (error) {
+      return res.json({
+        message: error,
       });
     }
   }
