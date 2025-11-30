@@ -5,6 +5,9 @@ import { findOrCreateCampus } from "../controllers/findOrCreateUser.js";
 import authenticateUser from "../middlewares/auth.js";
 import authorizeRoles from "../middlewares/roles.js";
 import prisma from "../../prisma/client.js";
+import { spawn } from "child_process";
+import { fileURLToPath } from "url";
+import path, { dirname } from "path";
 
 const router = express.Router();
 
@@ -12,6 +15,28 @@ const CLIENT_ID = process.env.CLIENT_ID;
 const client = new OAuth2Client(CLIENT_ID);
 
 const JWT_SECRET = process.env.JWT_SECRET;
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+
+// root proyek (TEMPA-BE)
+const PROJECT_ROOT = path.join(__dirname, "..", "..");
+
+// Path to Interpreter Python VENV
+const PYTHON_VENV_PATH = path.join(
+  PROJECT_ROOT,
+  "venv_pddikti",
+  "bin",
+  "python3"
+);
+
+// Path Script Python
+const PYTHON_SCRIPT_PATH = path.join(
+  PROJECT_ROOT,
+  "src",
+  "controllers",
+  "dataCampus.py"
+);
 
 // Oauth mentee with google
 router.post("/login-campus", async (req, res) => {
@@ -100,6 +125,7 @@ router.post(
       ward,
       lat,
       lng,
+      isCampusVerifiedByApi,
     } = req.body;
     const idCampus = req.user.id;
 
@@ -153,6 +179,14 @@ router.post(
         });
       }
 
+      let checkValidationApi = null;
+
+      if (isCampusVerifiedByApi) {
+        checkValidationApi = "accepted";
+      } else {
+        checkValidationApi = "pending";
+      }
+
       const saveDataCampus = await prisma.campus.update({
         where: {
           id: idCampus,
@@ -176,7 +210,7 @@ router.post(
           id: idCampus,
         },
         data: {
-          verification_status: "pending",
+          verification_status: checkValidationApi,
         },
       });
 
@@ -241,6 +275,64 @@ router.get(
     }
   }
 );
+
+// get data campus for validation
+router.get("/validate-campus/:campusName", (req, res) => {
+  const { campusName } = req.params;
+
+  if (!campusName) {
+    return res
+      .status(400)
+      .json({ status: "error", message: 'Parameter "name" diperlukan.' });
+  }
+
+  // Gunakan spawn untuk menjalankan proses Python
+  const pythonProcess = spawn(PYTHON_VENV_PATH, [
+    PYTHON_SCRIPT_PATH,
+    campusName,
+  ]);
+
+  let outputData = "";
+  let errorData = "";
+
+  // Tangkap output (stdout) dari skrip Python
+  pythonProcess.stdout.on("data", (data) => {
+    outputData += data.toString();
+  });
+
+  // Tangkap error (stderr) dari skrip Python
+  pythonProcess.stderr.on("data", (data) => {
+    errorData += data.toString();
+  });
+
+  // Tangani penutupan proses
+  pythonProcess.on("close", (code) => {
+    if (code !== 0) {
+      console.error(
+        `Python script exited with code ${code}. Stderr: ${errorData}`
+      );
+      return res.status(500).json({
+        status: "error",
+        message: "Gagal menjalankan validasi kampus (Internal Server Error).",
+      });
+    }
+
+    try {
+      // Parse output JSON dari Python
+      const result = JSON.parse(outputData);
+      console.log(result);
+
+      // Kirim hasil ke frontend
+      return res.json(result);
+    } catch (e) {
+      console.error("Failed to parse Python output:", outputData);
+      return res.status(500).json({
+        status: "error",
+        message: "Gagal memproses hasil dari Python.",
+      });
+    }
+  });
+});
 
 // test midleware
 router.post(

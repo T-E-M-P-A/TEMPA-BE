@@ -1,2 +1,8 @@
-.env 
+.env
 uploads/
+# Perbaiki nama folder virtual environment
+venv_pddikti/ 
+
+# Tambahan yang direkomendasikan untuk proyek Node.js/Express:
+node_modules/
+bun.lockb # Atau npm-debug.log jika menggunakan npm
