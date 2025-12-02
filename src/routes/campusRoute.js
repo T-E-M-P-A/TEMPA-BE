@@ -556,9 +556,54 @@ router.get("/validate-campus/:campusName", (req, res) => {
   });
 });
 
-// =======================================================================
-// 7. TEST MIDLEWARE
-// =======================================================================
+// get program campus for chart
+router.get(
+  "/get-program-campus-chart",
+  authenticateUser,
+  authorizeRoles(["campus"]),
+  async (req, res) => {
+    const idCampus = req.user.id;
+    try {
+      const getProgramCampus = await prisma.program.findMany({
+        where: {
+          id_campus: idCampus,
+        },
+        select: {
+          id: true,
+          program_name: true,
+          _count: {
+            select: {
+              mentee_progress: true,
+            },
+          },
+        },
+      });
+
+      // get count total mentee
+      const programsWithMenteeCount = getProgramCampus.map((program) => ({
+        id: program.id,
+        program_name: program.program_name,
+        // Total mentee diambil dari hasil perhitungan _count
+        total_mentee: program._count.mentee_progress,
+      }));
+
+      console.log(programsWithMenteeCount);
+
+      return res.status(200).json({
+        message: "Data program beserta total mentee berhasil diambil",
+        data: programsWithMenteeCount,
+      });
+    } catch (error) {
+      console.error(error);
+      return res.status(500).json({
+        message: "Terjadi kesalahan saat mengambil data program",
+        error: error.message,
+      });
+    }
+  }
+);
+
+// test midleware
 router.post(
   "/testing-midleware-campus",
   authenticateUser,
