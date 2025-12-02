@@ -8,6 +8,7 @@ import prisma from "../../prisma/client.js";
 import { spawn } from "child_process";
 import { fileURLToPath } from "url";
 import path, { dirname } from "path";
+import formatPathToUrl from "../controllers/formatPathUrl.js"; // Helper untuk format URL gambar
 
 const router = express.Router();
 
@@ -15,6 +16,7 @@ const CLIENT_ID = process.env.CLIENT_ID;
 const client = new OAuth2Client(CLIENT_ID);
 
 const JWT_SECRET = process.env.JWT_SECRET;
+const BASE_URL = process.env.API_BASE_URL; // Pastikan ini diatur di .env
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -22,13 +24,21 @@ const __dirname = dirname(__filename);
 // root proyek (TEMPA-BE)
 const PROJECT_ROOT = path.join(__dirname, "..", "..");
 
-// Path to Interpreter Python VENV
+// Path to Interpreter Python VENV (Windows)
 const PYTHON_VENV_PATH = path.join(
   PROJECT_ROOT,
   "venv_pddikti",
-  "bin",
-  "python3"
+  "Scripts",
+  "python.exe"
 );
+
+// uncomment if your system is linux or macos
+// const PYTHON_VENV_PATH = path.join(
+//   PROJECT_ROOT,
+//   "venv_pddikti",
+//   "bin",
+//   "python3"
+// );
 
 // Path Script Python
 const PYTHON_SCRIPT_PATH = path.join(
@@ -38,7 +48,9 @@ const PYTHON_SCRIPT_PATH = path.join(
   "dataCampus.py"
 );
 
-// Oauth mentee with google
+// =======================================================================
+// 1. OAUTH LOGIN CAMPUS
+// =======================================================================
 router.post("/login-campus", async (req, res) => {
   const token = req.body.credential;
 
@@ -108,7 +120,9 @@ router.post("/login-campus", async (req, res) => {
   }
 });
 
-// register mitra campus
+// =======================================================================
+// 2. REGISTER MITRA CAMPUS (Update Data)
+// =======================================================================
 router.post(
   "/register-mitra-campus",
   authenticateUser,
@@ -187,6 +201,7 @@ router.post(
         checkValidationApi = "pending";
       }
 
+      // Update data detail kampus
       const saveDataCampus = await prisma.campus.update({
         where: {
           id: idCampus,
@@ -205,6 +220,7 @@ router.post(
         },
       });
 
+      // Update status verifikasi
       const changeVerificationStatus = await prisma.campus.update({
         where: {
           id: idCampus,
@@ -244,7 +260,9 @@ router.post(
   }
 );
 
-// check verification status campus
+// =======================================================================
+// 3. CHECK VERIFICATION STATUS CAMPUS
+// =======================================================================
 router.get(
   "/check-verification-status",
   authenticateUser,
@@ -264,32 +282,227 @@ router.get(
 
       console.log(getVerification);
 
+      if (!getVerification) {
+        return res.status(404).json({
+          message: "Data kampus tidak ditemukan.",
+        });
+      }
+
       return res.status(200).json({
         message: "Data berhasil didapatkan",
         data: getVerification,
       });
     } catch (error) {
-      return res.json({
-        message: error,
+      console.error("Error fetching verification status:", error);
+      return res.status(500).json({
+        message: "Terjadi kesalahan server.",
+        error: error.message,
       });
     }
   }
 );
 
-// get data campus for validation
+// =======================================================================
+// 4. GET ALL PROGRAMS BY CAMPUS ID
+// =======================================================================
+router.get(
+  "/get-program-campus",
+  authenticateUser,
+  authorizeRoles(["campus"]),
+  async (req, res) => {
+    const idCampus = req.user.id;
+
+    try {
+      const getProgram = await prisma.program.findMany({
+        where: {
+          id_campus: idCampus,
+        },
+        include: {
+          campus_program_id_majorTocampus: {
+            include: {
+              standard_major: {
+                select: {
+                  major_name: true,
+                },
+              },
+            },
+          },
+          sesi_program: {
+            select: {
+              type_sesi: true,
+              sesi_date: true,
+            },
+          },
+        },
+        orderBy: {
+          create_at: "desc",
+        },
+      });
+
+      const formattedPrograms = getProgram.map((item) => {
+        const imageUrl = formatPathToUrl(item.path_gambar, BASE_URL);
+
+        const majorName =
+          item.campus_program_id_majorTocampus?.standard_major?.major_name ||
+          null;
+
+        const newItem = {
+          id: item.id,
+          program_name: item.program_name,
+          description: item.description,
+          start_date: item.start_date,
+          end_date: item.end_date,
+          capacity: item.capacity,
+          program_status: item.program_status,
+          major_name: majorName,
+          image_url: imageUrl,
+          sesi_program: item.type_sesi,
+        };
+
+        return newItem;
+      });
+
+      console.log(formattedPrograms);
+
+      if (formattedPrograms.length === 0) {
+        return res.status(200).json({
+          message: "Kampus belum memiliki program yang terdaftar.",
+          data: [],
+        });
+      }
+
+      return res.status(200).json({
+        message: "Data program kampus berhasil didapatkan.",
+        data: formattedPrograms,
+      });
+    } catch (error) {
+      console.error("Error fetching campus programs:", error);
+      return res.status(500).json({
+        message: "Terjadi kesalahan server saat mengambil data program.",
+        error: error.message,
+      });
+    }
+  }
+);
+
+// =======================================================================
+// 5. GET DETAIL PROGRAM BY ID
+// =======================================================================
+router.get(
+  "/get-detail-program/:id",
+  authenticateUser,
+  authorizeRoles(["campus"]),
+  async (req, res) => {
+    const idCampus = req.user.id;
+    const idProgram = req.params.id;
+
+    try {
+      const detailProgram = await prisma.program.findUnique({
+        where: {
+          id: parseInt(idProgram),
+          id_campus: idCampus, // Verifikasi kepemilikan
+        },
+        include: {
+          mentor: {
+            select: {
+              name: true,
+              email: true,
+            },
+          },
+          campus_program_id_majorTocampus: {
+            include: {
+              standard_major: {
+                select: {
+                  major_name: true,
+                },
+              },
+            },
+          },
+          sesi_program: {
+            select: {
+              id: true,
+              type_sesi: true,
+              description: true,
+              sesi_date: true,
+            },
+          },
+          _count: {
+            select: {
+              mentee_progress: true,
+            },
+          },
+        },
+      });
+
+      if (!detailProgram) {
+        return res.status(404).json({
+          message: "Program tidak ditemukan atau bukan milik kampus ini.",
+        });
+      }
+
+      const item = detailProgram;
+
+      // FORMAT PATH GAMBAR PROGRAM UTAMA
+      const imageUrl = formatPathToUrl(item.path_gambar, BASE_URL);
+
+      // BUAT OBJEK HASIL AKHIR
+      const formattedDetail = {
+        ...item,
+        image_url: imageUrl,
+        major_name:
+          item.campus_program_id_majorTocampus?.standard_major?.major_name ||
+          null,
+        registered_mentees: item._count.mentee_progress,
+      };
+
+      // Bersihkan properti yang tidak diperlukan lagi (opsional)
+      delete formattedDetail.path_gambar;
+      delete formattedDetail.id_campus;
+      delete formattedDetail.id_mentor;
+      delete formattedDetail.id_major;
+      delete formattedDetail.id_session_type;
+      delete formattedDetail.campus_program_id_majorTocampus;
+      delete formattedDetail._count;
+
+      console.log(formattedDetail);
+
+      return res.status(200).json({
+        message: "Detail program berhasil ditemukan.",
+        data: formattedDetail,
+      });
+    } catch (error) {
+      console.error("Error fetching detail program:", error);
+      // Handle error jika idProgram tidak valid (misalnya bukan integer)
+      if (error.message.includes("id must be of type integer")) {
+        return res.status(400).json({
+          message: "ID Program tidak valid.",
+          error: error.message,
+        });
+      }
+      return res.status(500).json({
+        message: "Terjadi kesalahan server saat mengambil detail program.",
+        error: error.message,
+      });
+    }
+  }
+);
+
+// =======================================================================
+// 6. GET DATA CAMPUS FOR VALIDATION (Menggunakan Python)
+// =======================================================================
 router.get("/validate-campus/:campusName", (req, res) => {
   const { campusName } = req.params;
 
   if (!campusName) {
     return res
       .status(400)
-      .json({ status: "error", message: 'Parameter "name" diperlukan.' });
+      .json({ status: "error", message: 'Parameter "campusName" diperlukan.' });
   }
 
   // Gunakan spawn untuk menjalankan proses Python
   const pythonProcess = spawn(PYTHON_VENV_PATH, [
     PYTHON_SCRIPT_PATH,
-    campusName,
+    campusName, // Argumen untuk Python
   ]);
 
   let outputData = "";
@@ -311,10 +524,19 @@ router.get("/validate-campus/:campusName", (req, res) => {
       console.error(
         `Python script exited with code ${code}. Stderr: ${errorData}`
       );
-      return res.status(500).json({
-        status: "error",
-        message: "Gagal menjalankan validasi kampus (Internal Server Error).",
-      });
+      // Coba parse outputData jika berisi error JSON dari Python
+      try {
+        const errorResult = JSON.parse(outputData);
+        if (errorResult.status === "error") {
+          return res.status(500).json(errorResult);
+        }
+      } catch (e) {
+        // Jika output bukan JSON error, kirim pesan error generik
+        return res.status(500).json({
+          status: "error",
+          message: "Gagal menjalankan validasi kampus (Internal Server Error).",
+        });
+      }
     }
 
     try {
@@ -334,7 +556,9 @@ router.get("/validate-campus/:campusName", (req, res) => {
   });
 });
 
-// test midleware
+// =======================================================================
+// 7. TEST MIDLEWARE
+// =======================================================================
 router.post(
   "/testing-midleware-campus",
   authenticateUser,
@@ -344,11 +568,12 @@ router.post(
 
     try {
       return res.status(200).json({
-        message: "Middleware mentee berhasil",
+        message: "Middleware campus berhasil",
       });
     } catch (error) {
-      return res.json({
-        message: error,
+      return res.status(500).json({
+        message: "Error di test middleware",
+        error: error.message,
       });
     }
   }
