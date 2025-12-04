@@ -108,6 +108,9 @@ model program {
   sesi_description                 String                 @db.VarChar(225)
   sesi_start                       DateTime               @db.Time(0)
   sesi_end                         DateTime               @db.Time(0)
+  visibility                       program_visibility?
+  lat                              Float?                 @db.Float
+  lng                              Float?                 @db.Float
   materi                           materi[]
   mentee_progress                  mentee_progress[]
   mentor                           mentor                 @relation(fields: [id_mentor], references: [id], onDelete: NoAction, map: "program_ibfk_1")
@@ -237,4 +240,9 @@ enum campus_verification_status {
   pending
   rejected
   null
+}
+
+enum program_visibility {
+  private
+  public
 }

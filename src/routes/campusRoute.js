@@ -357,6 +357,7 @@ router.get(
           major_name: majorName,
           image_url: imageUrl,
           sesi_program: item.type_sesi,
+          visibility: item.visibility,
         };
 
         return newItem;
@@ -388,6 +389,9 @@ router.get(
 // =======================================================================
 // 5. GET DETAIL PROGRAM BY ID
 // =======================================================================
+// =======================================================================
+// 5. GET DETAIL PROGRAM BY ID
+// =======================================================================
 router.get(
   "/get-detail-program/:id",
   authenticateUser,
@@ -395,18 +399,30 @@ router.get(
   async (req, res) => {
     const idCampus = req.user.id;
     const idProgram = req.params.id;
+    const parsedIdProgram = parseInt(idProgram);
+
+    // Validasi ID Program
+    if (isNaN(parsedIdProgram)) {
+      return res.status(400).json({
+        message: "ID Program tidak valid. Harus berupa angka.",
+      });
+    }
 
     try {
       const detailProgram = await prisma.program.findUnique({
         where: {
-          id: parseInt(idProgram),
+          id: parsedIdProgram,
           id_campus: idCampus, // Verifikasi kepemilikan
         },
         include: {
           mentor: {
             select: {
               name: true,
-              email: true,
+              // ✅ TAMBAHKAN EMAIL MENTOR (Diasumsikan ada field 'email' di model mentor)
+              // CATATAN: Schema Anda tidak menunjukkan 'email' di model mentor,
+              // jika error, ganti dengan field yang sesuai seperti 'nik'.
+              // Berdasarkan skema, saya akan tambahkan nik.
+              nik: true,
             },
           },
           campus_program_id_majorTocampus: {
@@ -418,14 +434,38 @@ router.get(
               },
             },
           },
-          sesi_program: {
+          // ✅ TAMBAHKAN MATERI PROGRAM
+          materi: {
             select: {
               id: true,
-              type_sesi: true,
+              title: true,
               description: true,
-              sesi_date: true,
+              visibility: true,
+              // Anda bisa tambahkan materi_resource jika perlu detail file
+              materi_resource: {
+                select: {
+                  type: true,
+                  path_file: true,
+                },
+              },
             },
           },
+          // ✅ TAMBAHKAN PROGRESS MENTEE (PESERTA)
+          mentee_progress: {
+            select: {
+              completion_status: true,
+              final_score: true,
+              mentee: {
+                // Relasi ke detail mentee
+                select: {
+                  username: true,
+                  email: true,
+                  gender: true,
+                },
+              },
+            },
+          },
+          // ✅ TAMBAHKAN COUNT UNTUK TOTAL PESERTA TERDAFTAR
           _count: {
             select: {
               mentee_progress: true,
@@ -444,6 +484,17 @@ router.get(
 
       // FORMAT PATH GAMBAR PROGRAM UTAMA
       const imageUrl = formatPathToUrl(item.path_gambar, BASE_URL);
+      const formattedMateriList = item.materi.map((materi) => ({
+        ...materi,
+        // Lakukan mapping pada materi_resource
+        materi_resource: materi.materi_resource.map((resource) => ({
+          ...resource,
+          // Gunakan fungsi formatPathToUrl untuk path_file
+          resource_url: formatPathToUrl(resource.path_file, BASE_URL),
+          // Hapus path_file yang mentah (opsional, tapi disarankan)
+          // delete resource.path_file;
+        })),
+      }));
 
       // BUAT OBJEK HASIL AKHIR
       const formattedDetail = {
@@ -452,7 +503,17 @@ router.get(
         major_name:
           item.campus_program_id_majorTocampus?.standard_major?.major_name ||
           null,
-        registered_mentees: item._count.mentee_progress,
+        registered_mentees: item._count?.mentee_progress || 0,
+        // ✅ MAP dan bersihkan list mentee agar lebih mudah diakses di frontend
+        mentee_list: item.mentee_progress.map((mp) => ({
+          username: mp.mentee?.username,
+          email: mp.mentee?.email,
+          gender: mp.mentee?.gender,
+          completion_status: mp.completion_status,
+          final_score: mp.final_score,
+        })),
+        // ✅ Gunakan data materi yang sudah diformat
+        materi_list: formattedMateriList,
       };
 
       // Bersihkan properti yang tidak diperlukan lagi (opsional)
@@ -463,12 +524,83 @@ router.get(
       delete formattedDetail.id_session_type;
       delete formattedDetail.campus_program_id_majorTocampus;
       delete formattedDetail._count;
+      // Hapus mentee_progress mentah yang sudah dipetakan
+      delete formattedDetail.mentee_progress;
+      delete formattedDetail.materi; // Hapus materi mentah
 
       console.log(formattedDetail);
 
       return res.status(200).json({
         message: "Detail program berhasil ditemukan.",
         data: formattedDetail,
+      });
+    } catch (error) {
+      console.error("Error fetching detail program:", error);
+      return res.status(500).json({
+        message: "Terjadi kesalahan server saat mengambil detail program.",
+        error: error.message,
+      });
+    }
+  }
+);
+
+// =======================================================================
+// 6. GET ALL MENTEE WHERE REGISTERED PROGRAM BY ID
+// =======================================================================
+router.get(
+  "/get-detail-program-total-mentee/:id",
+  authenticateUser,
+  authorizeRoles(["campus"]),
+  async (req, res) => {
+    const idCampus = req.user.id;
+    const idProgram = req.params.id;
+
+    try {
+      // ✅ GANTI DARI findMany MENJADI findFirst
+      const programData = await prisma.program.findFirst({
+        where: {
+          id: parseInt(idProgram),
+          id_campus: idCampus, // Verifikasi kepemilikan
+        },
+        select: {
+          mentee_progress: {
+            select: {
+              mentee: {
+                select: {
+                  username: true,
+                  email: true,
+                },
+              },
+            },
+          },
+          _count: {
+            select: {
+              mentee_progress: true,
+            },
+          },
+        },
+      });
+
+      if (!programData) {
+        return res.status(404).json({
+          message: "Program tidak ditemukan atau bukan milik kampus ini.",
+        });
+      }
+
+      const formattedData = {
+        total_mentee: programData._count.mentee_progress,
+        // Merapikan list mentee
+        mentees: programData.mentee_progress.map((mp) => ({
+          username: mp.mentee?.username,
+          email: mp.mentee?.email,
+        })),
+      };
+
+      console.log(formattedData);
+
+      return res.status(200).json({
+        message: "Data program beserta detail mentee berhasil diambil",
+        data: formattedData, // ✅ MENGEMBALIKAN OBJEK YANG SUDAH DIFORMAT
       });
     } catch (error) {
       console.error("Error fetching detail program:", error);
@@ -488,7 +620,7 @@ router.get(
 );
 
 // =======================================================================
-// 6. GET DATA CAMPUS FOR VALIDATION (Menggunakan Python)
+// 7. GET DATA CAMPUS FOR VALIDATION (Menggunakan Python)
 // =======================================================================
 router.get("/validate-campus/:campusName", (req, res) => {
   const { campusName } = req.params;
