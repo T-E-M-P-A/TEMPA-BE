@@ -36,7 +36,7 @@ model mentor {
   course_instructor course_instructor[]
   campus            campus              @relation(fields: [id_campus], references: [id], onDelete: Cascade, map: "mentor_ibfk_1")
   major             major               @relation(fields: [id_major], references: [id], onDelete: Cascade, map: "mentor_ibfk_2")
-  program           program[]
+  program_mentor    program_mentor[]
 
   @@index([id_campus, id_major], map: "id_campus")
   @@index([id_major], map: "id_major")
@@ -92,20 +92,21 @@ model program {
   id                               Int                    @id @default(autoincrement())
   program_name                     String                 @db.VarChar(225)
   description                      String                 @db.Text
-  start_date                       DateTime               @db.Date
-  end_date                         DateTime               @db.Date
+  start_program_date               DateTime               @db.Date
+  end_program_date                 DateTime               @db.Date
+  start_regis_date                 DateTime?              @db.Date
+  end_regis_date                   DateTime?              @db.Date
+  onsiteLocationName               String?                @db.Text
   create_at                        DateTime               @db.Timestamp(0)
   update_at                        DateTime               @db.Timestamp(0)
   capacity                         Int
   program_status                   program_program_status
   id_campus                        Int
-  id_mentor                        Int
   id_major                         Int
   path_gambar                      String?                @db.Text
   benefit                          Json
   terms_and_conditions             Json
   type_sesi                        program_type_sesi
-  sesi_description                 String                 @db.VarChar(225)
   sesi_start                       DateTime               @db.Time(0)
   sesi_end                         DateTime               @db.Time(0)
   visibility                       program_visibility?
@@ -113,14 +114,13 @@ model program {
   lng                              Float?                 @db.Float
   materi                           materi[]
   mentee_progress                  mentee_progress[]
-  mentor                           mentor                 @relation(fields: [id_mentor], references: [id], onDelete: NoAction, map: "program_ibfk_1")
   campus_program_id_campusTocampus campus                 @relation("program_id_campusTocampus", fields: [id_campus], references: [id], onDelete: Cascade, map: "program_ibfk_2")
   campus_program_id_majorTocampus  major                  @relation("program_id_majorTocampus", fields: [id_major], references: [id], onDelete: Cascade, map: "program_ibfk_3")
+  program_mentor                   program_mentor[]
   sesi_program                     sesi_program[]
 
-  @@index([id_campus, id_mentor], map: "id_campus")
+  @@index([id_campus], map: "id_campus")
   @@index([id_major], map: "id_major")
-  @@index([id_mentor], map: "id_mentor")
 }
 
 model course_instructor {
@@ -191,6 +191,17 @@ model materi_resource {
   materi    materi               @relation(fields: [id_materi], references: [id], onDelete: Cascade, map: "materi_resource_ibfk_1")
 
   @@index([id_materi], map: "id_materi")
+}
+
+model program_mentor {
+  id         Int     @id @default(autoincrement())
+  id_mentor  Int
+  id_program Int
+  mentor     mentor  @relation(fields: [id_mentor], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "program_mentor_ibfk_1")
+  program    program @relation(fields: [id_program], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "program_mentor_ibfk_2")
+
+  @@index([id_mentor], map: "id_mentor")
+  @@index([id_program], map: "id_program")
 }
 
 enum visibility_materi {

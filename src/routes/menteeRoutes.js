@@ -99,7 +99,6 @@ router.get(
               description: true,
               start_date: true,
               end_date: true,
-              id_mentor: true,
               capacity: true,
               path_gambar: true,
 
@@ -298,11 +297,6 @@ router.get(
               email: true,
               path_logo: true,
               path_banner: true,
-            },
-          },
-          mentor: {
-            select: {
-              name: true,
             },
           },
           campus_program_id_majorTocampus: {
