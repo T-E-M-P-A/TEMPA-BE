@@ -1223,6 +1223,41 @@ router.delete(
   }
 );
 
+// get major for form major
+router.get(
+  "/all-majors-form",
+  authenticateUser,
+  authorizeRoles(["campus"]),
+  async (req, res) => {
+    const idCampus = req.user.id;
+
+    try {
+      const allMajors = await prisma.standard_major.findMany({
+        select: {
+          id: true,
+          major_name: true,
+        },
+      });
+
+      if (!allMajors) {
+        return res.status(404).json({ message: "Data Jurusan tidak ada." });
+      }
+
+      console.log(allMajors);
+
+      return res.status(200).json({
+        message: "Data Jurusan ditemukan",
+        data: allMajors,
+      });
+    } catch (error) {
+      console.log(error);
+      return res
+        .status(500)
+        .json({ message: "Not Found due to internal error." });
+    }
+  }
+);
+
 // get major campus
 router.get(
   "/all-majors",
@@ -1256,6 +1291,77 @@ router.get(
       return res
         .status(500)
         .json({ message: "Not Found due to internal error." });
+    }
+  }
+);
+
+// =======================================================================
+// 11. ADD MAJORS TO CAMPUS
+// =======================================================================
+router.post(
+  "/add-majors-campus",
+  authenticateUser,
+  authorizeRoles(["campus"]),
+  async (req, res) => {
+    const idCampus = req.user.id;
+    const majorsToAdd = req.body;
+
+    // 1. Validasi input
+    if (!Array.isArray(majorsToAdd) || majorsToAdd.length === 0) {
+      return res.status(400).json({
+        message:
+          "Input tidak valid. Diperlukan array berisi objek jurusan (major).",
+      });
+    }
+
+    try {
+      // 2. Ambil jurusan yang sudah ada di kampus ini untuk mencegah duplikat
+      const existingMajors = await prisma.major.findMany({
+        where: { id_campus: idCampus },
+        select: { id_standard_major: true },
+      });
+      const existingStandardMajorIds = new Set(
+        existingMajors.map((m) => m.id_standard_major)
+      );
+
+      // 3. Filter input untuk mendapatkan jurusan yang benar-benar baru
+      const dataToCreate = majorsToAdd
+        .filter((major) => {
+          // Pastikan format objek benar dan belum ada
+          return (
+            major &&
+            typeof major.id === "number" &&
+            !existingStandardMajorIds.has(major.id)
+          );
+        })
+        .map((major) => ({
+          id_campus: idCampus,
+          id_standard_major: major.id,
+        }));
+
+      // 4. Jika tidak ada jurusan baru untuk ditambahkan
+      if (dataToCreate.length === 0) {
+        return res.status(200).json({
+          message:
+            "Tidak ada jurusan baru yang ditambahkan. Semua jurusan yang dikirim mungkin sudah terdaftar.",
+        });
+      }
+
+      // 5. Simpan jurusan baru ke database
+      const result = await prisma.major.createMany({
+        data: dataToCreate,
+      });
+
+      return res.status(201).json({
+        message: `Berhasil menambahkan ${result.count} jurusan baru ke kampus.`,
+        data: result,
+      });
+    } catch (error) {
+      console.error("Gagal menambahkan jurusan ke kampus:", error);
+      return res.status(500).json({
+        message: "Terjadi kesalahan server saat menambahkan jurusan.",
+        error: error.message,
+      });
     }
   }
 );
@@ -1510,12 +1616,9 @@ router.put(
           try {
             parsedVisionMission = JSON.parse(vision_mission);
           } catch (e) {
-            return res
-              .status(400)
-              .json({
-                message:
-                  "Format vision_mission tidak valid (harus berupa JSON).",
-              });
+            return res.status(400).json({
+              message: "Format vision_mission tidak valid (harus berupa JSON).",
+            });
           }
         }
         dataToUpdate.vision_mission = parsedVisionMission;
