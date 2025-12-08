@@ -1260,6 +1260,286 @@ router.get(
   }
 );
 
+// =======================================================================
+// 10. GET CAMPUS DETAIL FOR LOGGED IN CAMPUS
+// =======================================================================
+router.get(
+  "/detail-campus",
+  authenticateUser,
+  authorizeRoles(["campus"]),
+  async (req, res) => {
+    const idCampus = req.user.id;
+
+    try {
+      const campusDetail = await prisma.campus.findUnique({
+        where: {
+          id: idCampus,
+        },
+        select: {
+          id: true,
+          campus_name: true,
+          email: true, // Email login google
+          email_campus: true, // Email resmi kampus
+          path_logo: true,
+          path_banner: true,
+          address: true,
+          description: true,
+          vision_mission: true,
+          website_campus: true,
+          province: true,
+          city: true,
+          subdistrict: true,
+          ward: true,
+          lat: true,
+          lng: true,
+          major: {
+            include: {
+              standard_major: true,
+            },
+          },
+        },
+      });
+
+      console.log(campusDetail);
+
+      if (!campusDetail) {
+        return res
+          .status(404)
+          .json({ message: "Data kampus tidak ditemukan." });
+      }
+
+      // Format URL untuk gambar
+      const formattedData = { ...campusDetail };
+      formattedData.logo_url = formatPathToUrl(
+        formattedData.path_logo,
+        BASE_URL
+      );
+      formattedData.banner_url = formatPathToUrl(
+        formattedData.path_banner,
+        BASE_URL
+      );
+      delete formattedData.path_logo;
+      delete formattedData.path_banner;
+
+      return res.status(200).json({
+        message: "Detail kampus berhasil diambil.",
+        data: formattedData,
+      });
+    } catch (error) {
+      console.error("Gagal mengambil detail kampus:", error);
+      return res.status(500).json({
+        message: "Terjadi kesalahan pada server.",
+        error: error.message,
+      });
+    }
+  }
+);
+
+// =======================================================================
+// MULTER CONFIG FOR CAMPUS IMAGES (LOGO & BANNER)
+// =======================================================================
+const campusImageStorage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    // file.fieldname akan menjadi 'logo' atau 'banner'
+    const dir = `uploads/campus_images/${file.fieldname}`; // hasil: uploads/campus_images/logo atau uploads/campus_images/banner
+    if (!fs.existsSync(dir)) {
+      fs.mkdirSync(dir, { recursive: true });
+    }
+    cb(null, dir);
+  },
+  filename: (req, file, cb) => {
+    const uniqueSuffix = Date.now() + "-" + Math.round(Math.random() * 1e9);
+    cb(
+      null,
+      `campus-${file.fieldname}-` +
+        uniqueSuffix +
+        path.extname(file.originalname)
+    );
+  },
+});
+
+const uploadCampusImages = multer({
+  storage: campusImageStorage,
+  limits: { fileSize: 5 * 1024 * 1024 }, // 5 MB limit
+  fileFilter: (req, file, cb) => {
+    const fileTypes = /jpeg|jpg|png|gif/;
+    const extname = fileTypes.test(
+      path.extname(file.originalname).toLowerCase()
+    );
+    const mimetype = fileTypes.test(file.mimetype);
+    if (mimetype && extname) return cb(null, true);
+    cb(new Error("Hanya file gambar (jpeg, jpg, png, gif) yang diizinkan!"));
+  },
+});
+
+// =======================================================================
+// 12. EDIT CAMPUS LOGO & BANNER
+// =======================================================================
+router.put(
+  "/edit-image-campus",
+  authenticateUser,
+  authorizeRoles(["campus"]),
+  uploadCampusImages.fields([
+    { name: "logo", maxCount: 1 },
+    { name: "banner", maxCount: 1 },
+  ]),
+  async (req, res) => {
+    const idCampus = req.user.id;
+    const { campus_name } = req.body;
+    // console.log(req.body);
+
+    // Cek apakah ada file yang diunggah atau nama kampus yang dikirim
+    if ((!req.files || Object.keys(req.files).length === 0) && !campus_name) {
+      return res
+        .status(400)
+        .json({ message: "Tidak ada data yang dikirim untuk diperbarui." });
+    }
+
+    try {
+      // 1. Ambil data kampus saat ini untuk mendapatkan path gambar lama
+      const currentCampus = await prisma.campus.findUnique({
+        where: { id: idCampus },
+        select: { path_logo: true, path_banner: true },
+      });
+
+      if (!currentCampus) {
+        return res.status(404).json({ message: "Kampus tidak ditemukan." });
+      }
+
+      const dataToUpdate = {};
+
+      // Fungsi untuk menghapus file lama
+      const deleteOldFile = (filePath) => {
+        if (filePath) {
+          const fullPath = path.join(process.cwd(), filePath);
+          if (fs.existsSync(fullPath)) {
+            fs.unlink(fullPath, (err) => {
+              if (err)
+                console.error(`Gagal menghapus file lama: ${fullPath}`, err);
+              else console.log(`File lama berhasil dihapus: ${fullPath}`);
+            });
+          }
+        }
+      };
+
+      // 2. Proses file logo jika ada
+      if (req.files && req.files.logo) {
+        const newLogoPath = req.files.logo[0].path.replace(/\\/g, "/");
+        dataToUpdate.path_logo = newLogoPath;
+        deleteOldFile(currentCampus.path_logo);
+      }
+
+      // 3. Proses file banner jika ada
+      if (req.files && req.files.banner) {
+        const newBannerPath = req.files.banner[0].path.replace(/\\/g, "/");
+        dataToUpdate.path_banner = newBannerPath;
+        deleteOldFile(currentCampus.path_banner);
+      }
+
+      if (campus_name) {
+        dataToUpdate.campus_name = campus_name;
+      }
+
+      // 4. Update database dengan path baru jika ada data yang diupdate
+      if (Object.keys(dataToUpdate).length > 0) {
+        const updatedCampus = await prisma.campus.update({
+          where: { id: idCampus },
+          data: dataToUpdate,
+        });
+
+        return res.status(200).json({
+          message: "Gambar kampus berhasil diperbarui.",
+          data: updatedCampus,
+        });
+      } else {
+        return res
+          .status(400)
+          .json({ message: "Tidak ada data gambar untuk diperbarui." });
+      }
+    } catch (error) {
+      // Jika terjadi error, hapus file yang baru saja diunggah
+      if (req.files) {
+        if (req.files.logo) fs.unlinkSync(req.files.logo[0].path);
+        if (req.files.banner) fs.unlinkSync(req.files.banner[0].path);
+      }
+
+      console.error("Gagal mengedit gambar kampus:", error);
+      if (error.code === "P2025") {
+        return res
+          .status(404)
+          .json({ message: "Gagal memperbarui, kampus tidak ditemukan." });
+      }
+      return res.status(500).json({
+        message: "Terjadi kesalahan server saat memperbarui gambar.",
+        error: error.message,
+      });
+    }
+  }
+);
+
+// =======================================================================
+// 13. EDIT CAMPUS DESCRIPTION & VISION/MISSION
+// =======================================================================
+router.put(
+  "/edit-description-campus",
+  authenticateUser,
+  authorizeRoles(["campus"]),
+  async (req, res) => {
+    const idCampus = req.user.id;
+    const { description, vision_mission } = req.body;
+
+    // Cek apakah ada data yang dikirim untuk diperbarui
+    if (description === undefined && vision_mission === undefined) {
+      return res
+        .status(400)
+        .json({ message: "Tidak ada data yang dikirim untuk diperbarui." });
+    }
+
+    try {
+      const dataToUpdate = {};
+
+      if (description !== undefined) {
+        dataToUpdate.description = description;
+      }
+
+      if (vision_mission !== undefined) {
+        // Prisma mengharapkan objek/array untuk tipe data JSON.
+        // Jika frontend mengirim string, kita perlu parse.
+        let parsedVisionMission = vision_mission;
+        if (typeof vision_mission === "string") {
+          try {
+            parsedVisionMission = JSON.parse(vision_mission);
+          } catch (e) {
+            return res
+              .status(400)
+              .json({
+                message:
+                  "Format vision_mission tidak valid (harus berupa JSON).",
+              });
+          }
+        }
+        dataToUpdate.vision_mission = parsedVisionMission;
+      }
+
+      const updatedCampus = await prisma.campus.update({
+        where: { id: idCampus },
+        data: dataToUpdate,
+      });
+
+      return res.status(200).json({
+        message: "Deskripsi dan visi misi kampus berhasil diperbarui.",
+        data: updatedCampus,
+      });
+    } catch (error) {
+      console.error("Gagal mengedit deskripsi kampus:", error);
+      return res.status(500).json({
+        message: "Terjadi kesalahan server saat memperbarui data.",
+        error: error.message,
+      });
+    }
+  }
+);
+
 // test midleware
 router.post(
   "/testing-midleware-campus",

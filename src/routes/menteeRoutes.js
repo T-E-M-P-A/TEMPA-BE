@@ -97,8 +97,8 @@ router.get(
               id: true,
               program_name: true,
               description: true,
-              start_date: true,
-              end_date: true,
+              start_program_date: true,
+              end_program_date: true,
               capacity: true,
               path_gambar: true,
 
@@ -168,8 +168,8 @@ router.get(
             id: item.program.id,
             program_name: item.program.program_name,
             description: item.program.description,
-            start_date: item.program.start_date,
-            end_date: item.program.end_date,
+            start_date: item.program.start_program_date,
+            end_date: item.program.end_program_date,
             capacity: item.program.capacity,
 
             // KOREKSI: Gunakan finalPath yang sudah dipotong dan dibersihkan
@@ -464,8 +464,8 @@ router.get(
               capacity: true,
               type_sesi: true,
               program_status: true,
-              start_date: true,
-              sesi_description: true,
+              start_program_date: true,
+              onsiteLocationName: true,
               campus_program_id_majorTocampus: {
                 include: {
                   standard_major: {
