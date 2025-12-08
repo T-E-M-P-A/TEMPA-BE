@@ -1304,57 +1304,72 @@ router.post(
   authorizeRoles(["campus"]),
   async (req, res) => {
     const idCampus = req.user.id;
-    const majorsToAdd = req.body;
+    const newMajorsFromRequest = req.body;
 
     // 1. Validasi input
-    if (!Array.isArray(majorsToAdd) || majorsToAdd.length === 0) {
+    if (!Array.isArray(newMajorsFromRequest)) {
       return res.status(400).json({
         message:
-          "Input tidak valid. Diperlukan array berisi objek jurusan (major).",
+          "Input tidak valid. Diperlukan sebuah array berisi objek jurusan (major).",
       });
     }
 
     try {
-      // 2. Ambil jurusan yang sudah ada di kampus ini untuk mencegah duplikat
+      // Ekstrak ID jurusan standar dari request dan pastikan unik
+      const newStandardMajorIds = new Set(
+        newMajorsFromRequest
+          .map((major) => major.id)
+          .filter((id) => typeof id === "number")
+      );
+
+      // Ambil semua jurusan yang saat ini terdaftar untuk kampus ini
       const existingMajors = await prisma.major.findMany({
         where: { id_campus: idCampus },
         select: { id_standard_major: true },
       });
       const existingStandardMajorIds = new Set(
-        existingMajors.map((m) => m.id_standard_major)
+        existingMajors.map((major) => major.id_standard_major)
       );
 
-      // 3. Filter input untuk mendapatkan jurusan yang benar-benar baru
-      const dataToCreate = majorsToAdd
-        .filter((major) => {
-          // Pastikan format objek benar dan belum ada
-          return (
-            major &&
-            typeof major.id === "number" &&
-            !existingStandardMajorIds.has(major.id)
-          );
-        })
-        .map((major) => ({
-          id_campus: idCampus,
-          id_standard_major: major.id,
-        }));
+      // Tentukan jurusan mana yang akan ditambahkan dan dihapus
+      const idsToAdd = [...newStandardMajorIds].filter(
+        (id) => !existingStandardMajorIds.has(id)
+      );
+      const idsToRemove = [...existingStandardMajorIds].filter(
+        (id) => !newStandardMajorIds.has(id)
+      );
 
-      // 4. Jika tidak ada jurusan baru untuk ditambahkan
-      if (dataToCreate.length === 0) {
-        return res.status(200).json({
-          message:
-            "Tidak ada jurusan baru yang ditambahkan. Semua jurusan yang dikirim mungkin sudah terdaftar.",
-        });
-      }
+      // Gunakan transaksi untuk memastikan semua operasi berhasil atau tidak sama sekali
+      const transactionResult = await prisma.$transaction(async (tx) => {
+        // Hapus jurusan yang tidak lagi ada di daftar
+        if (idsToRemove.length > 0) {
+          await tx.major.deleteMany({
+            where: {
+              id_campus: idCampus,
+              id_standard_major: { in: idsToRemove },
+            },
+          });
+        }
 
-      // 5. Simpan jurusan baru ke database
-      const result = await prisma.major.createMany({
-        data: dataToCreate,
+        // Tambahkan jurusan baru
+        if (idsToAdd.length > 0) {
+          await tx.major.createMany({
+            data: idsToAdd.map((id) => ({
+              id_campus: idCampus,
+              id_standard_major: id,
+            })),
+          });
+        }
+
+        return { added: idsToAdd.length, removed: idsToRemove.length };
       });
 
-      return res.status(201).json({
-        message: `Berhasil menambahkan ${result.count} jurusan baru ke kampus.`,
-        data: result,
+      return res.status(200).json({
+        message: `Sinkronisasi jurusan berhasil. Ditambahkan: ${transactionResult.added}, Dihapus: ${transactionResult.removed}.`,
+        data: {
+          id_campus: idCampus,
+          synced_majors: [...newStandardMajorIds],
+        },
       });
     } catch (error) {
       console.error("Gagal menambahkan jurusan ke kampus:", error);
