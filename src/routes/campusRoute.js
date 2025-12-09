@@ -27,20 +27,20 @@ const __dirname = dirname(__filename);
 const PROJECT_ROOT = path.join(__dirname, "..", "..");
 
 // Path to Interpreter Python VENV (Windows)
+// const PYTHON_VENV_PATH = path.join(
+//   PROJECT_ROOT,
+//   "venv_pddikti",
+//   "Scripts",
+//   "python.exe"
+// );
+
+// uncomment if your system is linux or macos
 const PYTHON_VENV_PATH = path.join(
   PROJECT_ROOT,
   "venv_pddikti",
-  "Scripts",
-  "python.exe"
+  "bin",
+  "python3"
 );
-
-// uncomment if your system is linux or macos
-// const PYTHON_VENV_PATH = path.join(
-//   PROJECT_ROOT,
-//   "venv_pddikti",
-//   "bin",
-//   "python3"
-// );
 
 // Path Script Python
 const PYTHON_SCRIPT_PATH = path.join(
@@ -1291,6 +1291,45 @@ router.get(
       return res
         .status(500)
         .json({ message: "Not Found due to internal error." });
+    }
+  }
+);
+
+// =======================================================================
+// GET ALL MENTORS BY CAMPUS ID
+// =======================================================================
+router.get(
+  "/all-mentors",
+  authenticateUser,
+  authorizeRoles(["campus"]),
+  async (req, res) => {
+    const idCampus = req.user.id;
+
+    try {
+      const allMentors = await prisma.mentor.findMany({
+        where: {
+          id_campus: idCampus,
+        },
+        select: {
+          id: true,
+          name: true,
+          nik: true,
+        },
+      });
+
+      if (!allMentors || allMentors.length === 0) {
+        return res.status(404).json({ message: "Data Mentor tidak ada." });
+      }
+
+      return res.status(200).json({
+        message: "Data Mentor ditemukan",
+        data: allMentors,
+      });
+    } catch (error) {
+      console.log(error);
+      return res
+        .status(500)
+        .json({ message: "Terjadi kesalahan internal pada server." });
     }
   }
 );
