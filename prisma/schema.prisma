@@ -30,16 +30,14 @@ model mentor {
   id                Int                 @id @default(autoincrement())
   name              String              @db.VarChar(50)
   id_campus         Int
-  id_major          Int
   password          String?             @db.Text
   nik               Int                 @unique(map: "nik")
+  mentor_type       mentor_mentor_type
   course_instructor course_instructor[]
   campus            campus              @relation(fields: [id_campus], references: [id], onDelete: Cascade, map: "mentor_ibfk_1")
-  major             major               @relation(fields: [id_major], references: [id], onDelete: Cascade, map: "mentor_ibfk_2")
   program_mentor    program_mentor[]
 
-  @@index([id_campus, id_major], map: "id_campus")
-  @@index([id_major], map: "id_major")
+  @@index([id_campus], map: "id_campus")
 }
 
 model campus {
@@ -81,7 +79,6 @@ model major {
   id_standard_major                Int
   campus                           campus         @relation(fields: [id_campus], references: [id], onDelete: Cascade, map: "major_ibfk_1")
   standard_major                   standard_major @relation(fields: [id_standard_major], references: [id], onDelete: Cascade, map: "major_ibfk_2")
-  mentor                           mentor[]
   program_program_id_majorTocampus program[]      @relation("program_id_majorTocampus")
 
   @@index([id_campus, id_standard_major], map: "id_campus")
@@ -256,4 +253,9 @@ enum campus_verification_status {
 enum program_visibility {
   private
   public
+}
+
+enum mentor_mentor_type {
+  super_mentor
+  default
 }

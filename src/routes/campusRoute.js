@@ -11,6 +11,7 @@ import path, { dirname } from "path";
 import multer from "multer";
 import fs from "fs"; // <-- Impor modul 'fs' untuk operasi file
 import formatPathToUrl from "../controllers/formatPathUrl.js"; // Helper untuk format URL gambar
+import bcrypt from "bcrypt";
 
 const router = express.Router();
 
@@ -50,6 +51,13 @@ const PYTHON_SCRIPT_PATH = path.join(
   "dataCampus.py"
 );
 
+// Path Script Python untuk Mentor
+const PYTHON_MENTOR_SCRIPT_PATH = path.join(
+  PROJECT_ROOT,
+  "src",
+  "controllers",
+  "dataMentor.py"
+);
 // =======================================================================
 // MULTER CONFIG FOR PROGRAM IMAGE
 // =======================================================================
@@ -726,6 +734,69 @@ router.get("/validate-campus/:campusName", (req, res) => {
   });
 });
 
+// =======================================================================
+// 7.1. GET DATA MENTOR FOR VALIDATION (Menggunakan Python)
+// =======================================================================
+router.get("/validate-mentor/:nik", (req, res) => {
+  const { nik } = req.params;
+
+  if (!nik) {
+    return res
+      .status(400)
+      .json({ status: "error", message: 'Parameter "nik" diperlukan.' });
+  }
+
+  // Gunakan spawn untuk menjalankan proses Python
+  const pythonProcess = spawn(PYTHON_VENV_PATH, [
+    PYTHON_MENTOR_SCRIPT_PATH,
+    nik, // Argumen NIK untuk Python
+  ]);
+
+  let outputData = "";
+  let errorData = "";
+
+  // Tangkap output (stdout) dari skrip Python
+  pythonProcess.stdout.on("data", (data) => {
+    outputData += data.toString();
+  });
+
+  // Tangkap error (stderr) dari skrip Python
+  pythonProcess.stderr.on("data", (data) => {
+    errorData += data.toString();
+  });
+
+  // Tangani penutupan proses
+  pythonProcess.on("close", (code) => {
+    if (code !== 0) {
+      console.error(
+        `Python script (mentor) exited with code ${code}. Stderr: ${errorData}`
+      );
+      try {
+        const errorResult = JSON.parse(outputData);
+        if (errorResult.status === "error") {
+          return res.status(500).json(errorResult);
+        }
+      } catch (e) {
+        return res.status(500).json({
+          status: "error",
+          message: "Gagal menjalankan validasi mentor (Internal Server Error).",
+        });
+      }
+    }
+
+    try {
+      const result = JSON.parse(outputData);
+      return res.json(result);
+    } catch (e) {
+      console.error("Failed to parse Python output:", outputData);
+      return res.status(500).json({
+        status: "error",
+        message: "Gagal memproses hasil dari Python.",
+      });
+    }
+  });
+});
+
 // get program campus for chart
 router.get(
   "/get-program-campus-chart",
@@ -1314,6 +1385,7 @@ router.get(
           id: true,
           name: true,
           nik: true,
+          mentor_type: true,
         },
       });
 
@@ -1330,6 +1402,74 @@ router.get(
       return res
         .status(500)
         .json({ message: "Terjadi kesalahan internal pada server." });
+    }
+  }
+);
+
+// =======================================================================
+// CREATE NEW MENTOR BY CAMPUS
+// =======================================================================
+router.post(
+  "/create-mentor",
+  authenticateUser,
+  authorizeRoles(["campus"]),
+  async (req, res) => {
+    const idCampus = req.user.id;
+    const { name, nik, password, mentor_type } = req.body;
+
+    // 1. Validasi input dasar
+    if (!name || !nik || !password || !mentor_type) {
+      return res.status(400).json({
+        message:
+          "Gagal: Field 'name', 'nik', 'password', dan 'mentor_type' wajib diisi.",
+      });
+    }
+
+    const parsedNik = parseInt(nik, 10);
+
+    if (isNaN(parsedNik)) {
+      return res.status(400).json({
+        message: "Gagal: 'nik' dan 'id_major' harus berupa angka yang valid.",
+      });
+    }
+
+    try {
+      // 3. Enkripsi password
+      const saltRounds = 10;
+      const hashedPassword = await bcrypt.hash(password, saltRounds);
+
+      // 4. Buat mentor baru di database
+      const newMentor = await prisma.mentor.create({
+        data: {
+          name: name,
+          nik: parsedNik,
+          id_campus: idCampus,
+          password: hashedPassword,
+          mentor_type: mentor_type,
+        },
+      });
+
+      // Hapus password dari objek respons untuk keamanan
+      delete newMentor.password;
+
+      return res.status(201).json({
+        message: "Mentor baru berhasil dibuat.",
+        data: newMentor,
+      });
+    } catch (error) {
+      console.error("Gagal membuat mentor:", error);
+
+      // Penanganan error jika NIK sudah ada (unique constraint)
+      if (error.code === "P2002" && error.meta?.target?.includes("nik")) {
+        return res.status(409).json({
+          message: `Gagal: NIK '${nik}' sudah terdaftar.`,
+        });
+      }
+
+      return res.status(500).json({
+        message: "Terjadi kesalahan internal pada server saat membuat mentor.",
+        error: error.message,
+      });
     }
   }
 );
