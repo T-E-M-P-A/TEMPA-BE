@@ -1475,6 +1475,177 @@ router.post(
 );
 
 // =======================================================================
+// EDIT MENTOR BY ID
+// =======================================================================
+router.put(
+  "/edit-mentor/:id",
+  authenticateUser,
+  authorizeRoles(["campus"]),
+  async (req, res) => {
+    const idCampus = req.user.id;
+    const { id } = req.params;
+    const mentorId = parseInt(id, 10);
+
+    // 1. Validasi ID mentor dari parameter
+    if (isNaN(mentorId)) {
+      return res
+        .status(400)
+        .json({ message: "ID Mentor tidak valid. Harus berupa angka." });
+    }
+
+    const { name, nik, password, mentor_type } = req.body;
+
+    // Cek jika tidak ada data yang dikirim
+    if (!name && !nik && !password && !mentor_type) {
+      return res
+        .status(400)
+        .json({ message: "Tidak ada data yang dikirim untuk diperbarui." });
+    }
+
+    try {
+      // 2. Verifikasi bahwa mentor ada dan milik kampus yang login
+      const existingMentor = await prisma.mentor.findFirst({
+        where: {
+          id: mentorId,
+          id_campus: idCampus,
+        },
+      });
+
+      if (!existingMentor) {
+        return res.status(404).json({
+          message: "Mentor tidak ditemukan atau Anda tidak berhak mengeditnya.",
+        });
+      }
+
+      // 3. Siapkan data yang akan di-update
+      const dataToUpdate = {};
+
+      if (name) dataToUpdate.name = name;
+      if (mentor_type) dataToUpdate.mentor_type = mentor_type;
+
+      if (nik) {
+        const parsedNik = parseInt(nik, 10);
+        if (isNaN(parsedNik)) {
+          return res
+            .status(400)
+            .json({ message: "Gagal: 'nik' harus berupa angka yang valid." });
+        }
+        dataToUpdate.nik = parsedNik;
+      }
+
+      // Enkripsi password baru jika ada
+      if (password) {
+        const saltRounds = 10;
+        dataToUpdate.password = await bcrypt.hash(password, saltRounds);
+      }
+
+      // 4. Lakukan update di database
+      const updatedMentor = await prisma.mentor.update({
+        where: { id: mentorId },
+        data: dataToUpdate,
+      });
+
+      // Hapus password dari objek respons
+      delete updatedMentor.password;
+
+      return res.status(200).json({
+        message: "Data mentor berhasil diperbarui.",
+        data: updatedMentor,
+      });
+    } catch (error) {
+      console.error("Gagal mengedit mentor:", error);
+      if (error.code === "P2002" && error.meta?.target?.includes("nik")) {
+        return res.status(409).json({
+          message: `Gagal: NIK '${nik}' sudah terdaftar.`,
+        });
+      }
+      return res.status(500).json({
+        message: "Terjadi kesalahan server saat mengedit mentor.",
+        error: error.message,
+      });
+    }
+  }
+);
+
+// =======================================================================
+// DELETE MENTOR BY ID
+// =======================================================================
+router.delete(
+  "/delete-mentor/:id",
+  authenticateUser,
+  authorizeRoles(["campus"]),
+  async (req, res) => {
+    const idCampus = req.user.id;
+    const { id } = req.params;
+    const mentorId = parseInt(id, 10);
+
+    // 1. Validasi ID mentor
+    if (isNaN(mentorId)) {
+      return res
+        .status(400)
+        .json({ message: "ID Mentor tidak valid. Harus berupa angka." });
+    }
+
+    try {
+      // 2. Verifikasi bahwa mentor ada dan milik kampus yang login
+      const mentorToDelete = await prisma.mentor.findFirst({
+        where: {
+          id: mentorId,
+          id_campus: idCampus,
+        },
+        include: {
+          // Sertakan relasi untuk pemeriksaan
+          _count: {
+            select: { program_mentor: true },
+          },
+        },
+      });
+
+      // Jika mentor tidak ditemukan atau bukan milik kampus ini
+      if (!mentorToDelete) {
+        return res.status(404).json({
+          message:
+            "Mentor tidak ditemukan atau Anda tidak berhak menghapusnya.",
+        });
+      }
+
+      // 3. Cek relasi ke program_mentor sebelum menghapus
+      if (mentorToDelete._count.program_mentor > 0) {
+        return res.status(409).json({
+          message: `Gagal menghapus: Mentor ini masih terdaftar di ${mentorToDelete._count.program_mentor} program. Harap hapus dari program terlebih dahulu.`,
+        });
+      }
+
+      // 4. Hapus mentor dari database
+      await prisma.mentor.delete({
+        where: {
+          id: mentorId,
+        },
+      });
+
+      return res.status(200).json({
+        message: `Mentor dengan ID ${mentorId} berhasil dihapus.`,
+      });
+    } catch (error) {
+      console.error("Gagal menghapus mentor:", error);
+
+      // Penanganan error spesifik dari Prisma jika record tidak ditemukan saat delete
+      if (error.code === "P2025") {
+        return res.status(404).json({
+          message:
+            "Gagal menghapus: Mentor tidak ditemukan (mungkin sudah dihapus).",
+        });
+      }
+
+      return res.status(500).json({
+        message: "Terjadi kesalahan server saat menghapus mentor.",
+        error: error.message,
+      });
+    }
+  }
+);
+
+// =======================================================================
 // 11. ADD MAJORS TO CAMPUS
 // =======================================================================
 router.post(
