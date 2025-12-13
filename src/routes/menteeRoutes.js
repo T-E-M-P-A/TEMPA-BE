@@ -671,19 +671,15 @@ router.get(
                 },
               },
               program_program_id_majorTocampus: {
-                select: {
-                  id: true,
-                  program_name: true,
-                  description: true,
-                  start_date: true,
-                  capacity: true,
-                  path_gambar: true,
-                  type_sesi: true,
-                  program_status: true,
-                  sesi_description: true,
-                  campus_program_id_campusTocampus: {
-                    select: {
-                      campus_name: true,
+                include: {
+                  campus_program_id_majorTocampus: {
+                    include: {
+                      standard_major: true,
+                      campus: {
+                        select: {
+                          campus_name: true,
+                        },
+                      },
                     },
                   },
                 },
@@ -701,66 +697,49 @@ router.get(
         });
       }
 
-      if (detailMajor.major && Array.isArray(detailMajor.major)) {
-        detailMajor.major = detailMajor.major.map((majorEntry) => {
-          // format banner campus
-          const rawPath = majorEntry.campus?.path_banner;
-          let updatedMajorEntry = { ...majorEntry };
+      // Format data untuk menyertakan URL gambar yang valid
+      const formattedDetailMajor = {
+        ...detailMajor,
+        campus: detailMajor.major.map((m) => {
+          // Format Banner Kampus
+          const campusBannerUrl = formatPathToUrl(
+            m.campus?.path_banner,
+            BASE_URL
+          );
 
-          if (rawPath) {
-            const bannerUrl = formatPathToUrl(rawPath, BASE_URL);
+          // Format Gambar Program
+          const formattedPrograms = m.program_program_id_majorTocampus.map(
+            (prog) => {
+              const programImageUrl = formatPathToUrl(
+                prog.path_gambar,
+                BASE_URL
+              );
+              const newProg = { ...prog, image_url: programImageUrl };
+              delete newProg.path_gambar;
+              return newProg;
+            }
+          );
 
-            const updatedCampus = {
-              ...majorEntry.campus,
-              banner_url: bannerUrl,
-            };
+          const newMajor = {
+            ...m,
+            campus: {
+              ...m.campus,
+              banner_url: campusBannerUrl,
+            },
+            program_program_id_majorTocampus: formattedPrograms,
+          };
 
-            delete updatedCampus.path_banner;
-
-            updatedMajorEntry = {
-              ...updatedMajorEntry,
-              campus: updatedCampus,
-            };
-          } else {
-            delete updatedMajorEntry.campus?.path_banner;
+          if (newMajor.campus) {
+            delete newMajor.campus.path_banner;
           }
 
-          const programs = updatedMajorEntry.program_program_id_majorTocampus;
-
-          // format program image
-          if (programs && Array.isArray(programs)) {
-            updatedMajorEntry.program_program_id_majorTocampus = programs.map(
-              (program) => {
-                const rawProgramPath = program.path_gambar;
-                const updatedProgram = { ...program };
-
-                if (rawProgramPath) {
-                  const programImageUrl = formatPathToUrl(
-                    rawProgramPath,
-                    BASE_URL
-                  );
-
-                  updatedProgram.program_image_url = programImageUrl;
-                }
-
-                // delete raw path_gambar
-                delete updatedProgram.path_gambar;
-
-                return updatedProgram;
-              }
-            );
-          }
-
-          // Kembalikan entri major yang sudah diformat di kedua lapisan
-          return updatedMajorEntry;
-        });
-      }
-
-      console.log(detailMajor);
+          return newMajor;
+        }),
+      };
 
       return res.status(200).json({
         message: "Detail jurusan berhasil diambil",
-        data: detailMajor,
+        data: formattedDetailMajor,
       });
     } catch (error) {
       console.error("Kesalahan saat mengambil detail jurusan:", error);
