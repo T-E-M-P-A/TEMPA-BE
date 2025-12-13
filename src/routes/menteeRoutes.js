@@ -577,33 +577,54 @@ router.post(
         });
       }
 
-      // check if mentee is already register to program
-      const programClosed = await prisma.program.findFirst({
+      // Check program status and capacity
+      const programData = await prisma.program.findUnique({
         where: {
           id: idProgramInt,
-          program_status: "closed",
+        },
+        select: {
+          program_status: true,
+          capacity: true,
         },
       });
 
-      // if program closed
-      if (programClosed) {
-        console.log(`Program sudah tutup/selesai`);
+      if (!programData) {
+        return res.status(404).json({ message: "Program tidak ditemukan." });
+      }
+
+      if (programData.program_status === "closed") {
         return res.status(409).json({
-          message: `Program sudah tutup/selesai!`,
-          data: programClosed,
+          message: "Program sudah tutup/selesai!",
         });
       }
 
-      // register program
-      const registerProgram = await prisma.mentee_progress.create({
-        data: {
-          completion_status: "on_going",
-          completion_date: null,
-          id_mentee: idMentee,
-          id_program: idProgramInt,
-        },
+      if (programData.capacity <= 0) {
+        return res.status(409).json({
+          message: "Kuota program sudah penuh!",
+        });
+      }
+
+      // Register program and decrement capacity
+      const registerProgram = await prisma.$transaction(async (tx) => {
+        const newProgress = await tx.mentee_progress.create({
+          data: {
+            completion_status: "on_going",
+            completion_date: null,
+            id_mentee: idMentee,
+            id_program: idProgramInt,
+          },
+        });
+
+        await tx.program.update({
+          where: { id: idProgramInt },
+          data: {
+            capacity: { decrement: 1 },
+          },
+        });
+
+        return newProgress;
       });
-      console.log(registerProgram);
+      // console.log(registerProgram);
 
       return res.status(201).json({
         message: `Pendaftaran berhasil!`,
