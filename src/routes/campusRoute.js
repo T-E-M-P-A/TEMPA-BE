@@ -98,14 +98,14 @@ const uploadProgramImage = multer({
 // =======================================================================
 const materiFileStorage = multer.diskStorage({
   destination: (req, file, cb) => {
-    const dir = "uploads/program_materi";
+    const dir = path.join(PROJECT_ROOT, "uploads/program_materi");
     if (!fs.existsSync(dir)) {
       fs.mkdirSync(dir, { recursive: true });
     }
     cb(null, dir);
   },
   filename: (req, file, cb) => {
-    const dir = "uploads/program_materi";
+    const dir = path.join(PROJECT_ROOT, "uploads/program_materi");
     // Ganti spasi dengan (-) agar semua karakter menyambung
     let fileName = file.originalname.replace(/\s+/g, "-");
     const ext = path.extname(fileName);
@@ -124,6 +124,19 @@ const uploadMateriFiles = multer({
   storage: materiFileStorage,
   limits: { fileSize: 100 * 1024 * 1024 }, // 100 MB limit
 });
+
+const normalizeResourcePath = (inputPath) => {
+  if (!inputPath) return "";
+
+  // Hilangkan URL domain jika ada
+  inputPath = inputPath.replace(/^https?:\/\/[^/]+\/public\//, "");
+
+  // Ambil path setelah program_materi/
+  const parts = inputPath.split("program_materi/");
+  if (parts.length < 2) return "";
+
+  return `program_materi/${parts[1]}`;
+};
 
 // =======================================================================
 // 1. OAUTH LOGIN CAMPUS
@@ -620,7 +633,7 @@ router.get(
       delete formattedDetail.mentee_progress;
       delete formattedDetail.materi; // Hapus materi mentah
 
-      console.log(formattedDetail);
+      // console.log(formattedDetail);
 
       return res.status(200).json({
         message: "Detail program berhasil ditemukan.",
@@ -2302,7 +2315,7 @@ router.post(
             message: "File wajib diunggah untuk tipe materi 'file'.",
           });
         }
-        resourcePath = req.file.path.replace(/\\/g, "/");
+        resourcePath = `uploads/program_materi/${req.file.filename}`;
       } else if (type === "kuis" || type === "video") {
         if (!url) {
           if (req.file && fs.existsSync(req.file.path))
@@ -2359,6 +2372,340 @@ router.post(
       console.error("Gagal menambahkan materi:", error);
       return res.status(500).json({
         message: "Terjadi kesalahan server saat menambahkan materi.",
+        error: error.message,
+      });
+    }
+  }
+);
+
+// =======================================================================
+// EDIT MATERI AND ADD RESOURCES
+// =======================================================================
+router.put(
+  "/edit-materi/:idMateri",
+  authenticateUser,
+  authorizeRoles(["campus"]),
+  uploadMateriFiles.any(),
+  async (req, res) => {
+    const idCampus = req.user.id;
+    const { idMateri } = req.params;
+    const { title, description, visibility } = req.body;
+
+    const idMateriInt = parseInt(idMateri, 10);
+
+    // console.log("=========================================");
+    // console.log("REQ.BODY (Field Teks/Data):", req.body);
+    // console.log("REQ.FILES (File Upload):", req.files);
+    // console.log("=========================================");
+
+    // Helper untuk menghapus file jika terjadi error
+    const cleanupFiles = (files) => {
+      if (files && Array.isArray(files)) {
+        files.forEach((file) => {
+          if (fs.existsSync(file.path)) fs.unlinkSync(file.path);
+        });
+      }
+    };
+
+    if (isNaN(idMateriInt)) {
+      cleanupFiles(req.files);
+      return res.status(400).json({ message: "ID Materi tidak valid." });
+    }
+
+    try {
+      // 1. Cari Materi dan Verifikasi Kepemilikan
+      const materi = await prisma.materi.findFirst({
+        where: { id: idMateriInt },
+        include: {
+          program: true,
+          materi_resource: true,
+        },
+      });
+
+      if (!materi) {
+        cleanupFiles(req.files);
+        return res.status(404).json({ message: "Materi tidak ditemukan." });
+      }
+
+      if (materi.program.id_campus !== idCampus) {
+        cleanupFiles(req.files);
+        return res.status(403).json({
+          message: "Anda tidak memiliki akses untuk mengedit materi ini.",
+        });
+      }
+
+      // 2. Parsing new_resources dari req.body dan req.files
+      const newResourcesMap = {};
+
+      // Helper to safely set resource data
+      const setResourceData = (index, key, value) => {
+        if (!newResourcesMap[index]) newResourcesMap[index] = {};
+        newResourcesMap[index][key] = value;
+      };
+
+      // Cek jika new_resources sudah berupa array/objek (parsed body)
+      if (
+        req.body.new_resources &&
+        typeof req.body.new_resources === "object"
+      ) {
+        Object.keys(req.body.new_resources).forEach((index) => {
+          const item = req.body.new_resources[index];
+          if (item && typeof item === "object") {
+            Object.keys(item).forEach((key) => {
+              setResourceData(index, key, item[key]);
+            });
+          }
+        });
+      }
+
+      // Parse field teks (type, url, dll)
+      Object.keys(req.body).forEach((key) => {
+        const match = key.match(/^new_resources\[(\d+)\]\[(\w+)\]$/);
+        if (match) {
+          setResourceData(match[1], match[2], req.body[key]);
+        }
+      });
+
+      // Map file yang diupload ke index yang sesuai
+      if (req.files) {
+        req.files.forEach((file) => {
+          // Fieldname format: new_resources[0][file]
+          const match = file.fieldname.match(
+            /^new_resources\[(\d+)\]\[file\]$/
+          );
+          if (match) {
+            setResourceData(match[1], "file", file);
+          }
+        });
+      }
+
+      const newResources = Object.values(newResourcesMap);
+      // Filter resource yang memiliki type ATAU memiliki file (jika type lupa dikirim)
+      const validNewResources = newResources.filter(
+        (res) => res.type || res.file
+      );
+      // console.log("New Resources Parsed:", validNewResources);
+
+      // 3. Kelola Resource Lama (Keep dan Delete)
+      // Parsing kept_resource_ids yang lebih robust (handle array dan indexed keys)
+      let keptResourceIds = [];
+
+      // Cek format array/single value langsung
+      if (req.body.kept_resource_ids) {
+        if (Array.isArray(req.body.kept_resource_ids)) {
+          keptResourceIds = req.body.kept_resource_ids.map((id) =>
+            parseInt(id, 10)
+          );
+        } else if (typeof req.body.kept_resource_ids === "object") {
+          keptResourceIds = Object.values(req.body.kept_resource_ids).map(
+            (id) => parseInt(id, 10)
+          );
+        } else {
+          keptResourceIds = [parseInt(req.body.kept_resource_ids, 10)];
+        }
+      }
+
+      // Cek format indexed keys: kept_resource_ids[0], kept_resource_ids[1]
+      Object.keys(req.body).forEach((key) => {
+        const match = key.match(/^kept_resource_ids\[(\d+)\]$/);
+        if (match) {
+          keptResourceIds.push(parseInt(req.body[key], 10));
+        }
+      });
+
+      // Filter valid integers dan unique
+      keptResourceIds = [...new Set(keptResourceIds.filter(Number.isInteger))];
+
+      // 4. Validasi dan Persiapan Data Resource Baru
+      const resourcesToCreate = [];
+
+      for (const [idx, resData] of validNewResources.entries()) {
+        let type = resData.type ? resData.type.trim().toLowerCase() : "";
+
+        // Jika type kosong tapi ada file, asumsikan tipe 'file'
+        if (!type && resData.file) {
+          type = "file";
+        }
+
+        let resourcePath = "";
+
+        if (type === "file") {
+          if (!resData.file) {
+            // Cek apakah ini file lama yang dikirim via URL (validasi path)
+            let isExistingFile = false;
+            if (resData.url) {
+              // Ambil bagian path setelah 'program_materi/'
+              if (resData.url) {
+                const normalizedUrl = normalizeResourcePath(resData.url);
+
+                const existingRes = materi.materi_resource.find(
+                  (r) =>
+                    r.type === "file" &&
+                    normalizeResourcePath(r.path_file) === normalizedUrl
+                );
+
+                if (existingRes) {
+                  keptResourceIds.push(existingRes.id);
+                  continue;
+                }
+              }
+            }
+
+            if (isExistingFile) continue;
+
+            cleanupFiles(req.files);
+            return res.status(400).json({
+              message: "File wajib diunggah untuk resource bertipe 'file'.",
+            });
+          }
+
+          // Gunakan filename dari Multer yang sudah menangani duplikasi nama (auto-rename)
+          resourcePath = `uploads/program_materi/${resData.file.filename}`;
+        } else if (type === "kuis" || type === "video") {
+          const urlValue = resData.url || resData.path_file;
+
+          if (!urlValue) {
+            cleanupFiles(req.files);
+            return res.status(400).json({
+              message: `URL wajib diisi untuk tipe '${type}'.`,
+            });
+          }
+          resourcePath = urlValue;
+
+          // Hapus file jika user tidak sengaja upload file untuk tipe non-file
+          if (resData.file && fs.existsSync(resData.file.path)) {
+            fs.unlinkSync(resData.file.path);
+          }
+        } else {
+          cleanupFiles(req.files);
+          return res.status(400).json({
+            message:
+              "Tipe resource tidak valid. Gunakan 'file', 'kuis', atau 'video'.",
+          });
+        }
+
+        resourcesToCreate.push({
+          id_materi: idMateriInt, // Tambahkan id_materi untuk createMany
+          type: type,
+          path_file: resourcePath,
+        });
+      }
+
+      // Update unique keptResourceIds
+      keptResourceIds = [...new Set(keptResourceIds)];
+
+      // ID resource yang saat ini ada di DB
+      const existingResourceIds = materi.materi_resource.map((r) => r.id);
+
+      // ID resource yang akan DIHAPUS
+      const resourcesToDeleteIds = existingResourceIds.filter(
+        (id) => !keptResourceIds.includes(id)
+      );
+
+      // Cek Batas Maksimal Resource (Max 3)
+      const keptCount = keptResourceIds.length;
+      const newCount = resourcesToCreate.length;
+
+      if (keptCount + newCount > 3) {
+        cleanupFiles(req.files);
+        return res.status(400).json({
+          message: `Gagal: Jumlah resource (lama + baru) melebihi batas (Max 3). Resource yang dipertahankan: ${keptCount}, Resource baru: ${newCount}.`,
+        });
+      }
+
+      // Refactor: Jangan hapus data di database jika file yang sama ditambahkan lagi (Rescue logic)
+      const newResourcePaths = resourcesToCreate.map((r) => r.path_file);
+      const resourcesToDelete = materi.materi_resource.filter((r) =>
+        resourcesToDeleteIds.includes(r.id)
+      );
+
+      const idsToRescue = resourcesToDelete
+        .filter(
+          (r) => r.type === "file" && newResourcePaths.includes(r.path_file)
+        )
+        .map((r) => r.id);
+
+      const finalResourcesToDeleteIds = resourcesToDeleteIds.filter(
+        (id) => !idsToRescue.includes(id)
+      );
+
+      // Hapus file fisik untuk resource yang akan dihapus (hanya tipe 'file')
+      // Dilakukan setelah validasi resource baru untuk memastikan file tidak sedang digunakan ulang
+      if (finalResourcesToDeleteIds.length > 0) {
+        const deletedFileResources = materi.materi_resource.filter(
+          (r) => r.type === "file" && finalResourcesToDeleteIds.includes(r.id)
+        );
+
+        for (const res of deletedFileResources) {
+          // Cek apakah file ini digunakan oleh resource lain yang TIDAK dihapus (di DB)
+          const isUsedElsewhere = await prisma.materi_resource.findFirst({
+            where: {
+              path_file: res.path_file,
+              id: { notIn: finalResourcesToDeleteIds },
+            },
+          });
+
+          // Cek apakah file ini digunakan oleh resource yang baru akan dibuat (resourcesToCreate)
+          const isReusedInNew = resourcesToCreate.some(
+            (newRes) => newRes.path_file === res.path_file
+          );
+
+          if (
+            !isUsedElsewhere &&
+            !isReusedInNew &&
+            fs.existsSync(res.path_file)
+          ) {
+            fs.unlinkSync(res.path_file);
+          }
+        }
+      }
+
+      // 5. Update Materi menggunakan Transaction (Atomik)
+      // Ini menjamin update materi, delete resource, dan create resource berhasil semua
+      const transactionQueries = [
+        // A. Update Detail Materi
+        prisma.materi.update({
+          where: { id: idMateriInt },
+          data: {
+            title: title,
+            description: description,
+            visibility: visibility,
+            update_at: new Date(),
+          },
+        }),
+        // B. Hapus Resource yang Tidak Dipertahankan
+        prisma.materi_resource.deleteMany({
+          where: {
+            id: { in: finalResourcesToDeleteIds },
+          },
+        }),
+      ];
+      // C. Buat Resource Baru (jika ada)
+      if (resourcesToCreate.length > 0) {
+        transactionQueries.push(
+          prisma.materi_resource.createMany({
+            data: resourcesToCreate,
+          })
+        );
+      }
+
+      await prisma.$transaction(transactionQueries);
+
+      // Ambil data materi yang sudah diperbarui secara penuh
+      const finalMateri = await prisma.materi.findFirst({
+        where: { id: idMateriInt },
+        include: { materi_resource: true },
+      });
+
+      return res.status(200).json({
+        message: "Materi berhasil diperbarui.",
+        data: finalMateri,
+      });
+    } catch (error) {
+      cleanupFiles(req.files);
+      console.error("Gagal mengedit materi:", error);
+      return res.status(500).json({
+        message: "Terjadi kesalahan server saat mengedit materi.",
         error: error.message,
       });
     }
