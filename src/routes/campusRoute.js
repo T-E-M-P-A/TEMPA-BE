@@ -2712,6 +2712,88 @@ router.put(
   }
 );
 
+// =======================================================================
+// DELETE MATERI BY ID
+// =======================================================================
+router.delete(
+  "/delete-materi/:idMateri",
+  authenticateUser,
+  authorizeRoles(["campus"]),
+  async (req, res) => {
+    const idCampus = req.user.id;
+    const { idMateri } = req.params;
+    const idMateriInt = parseInt(idMateri, 10);
+
+    if (isNaN(idMateriInt)) {
+      return res.status(400).json({ message: "ID Materi tidak valid." });
+    }
+
+    try {
+      // 1. Cari Materi dan Verifikasi Kepemilikan
+      const materi = await prisma.materi.findFirst({
+        where: { id: idMateriInt },
+        include: {
+          program: true,
+          materi_resource: true,
+        },
+      });
+
+      if (!materi) {
+        return res.status(404).json({ message: "Materi tidak ditemukan." });
+      }
+
+      if (materi.program.id_campus !== idCampus) {
+        return res.status(403).json({
+          message: "Anda tidak memiliki akses untuk menghapus materi ini.",
+        });
+      }
+
+      // 2. Hapus File Fisik (jika tidak digunakan oleh materi lain)
+      if (materi.materi_resource && materi.materi_resource.length > 0) {
+        for (const resource of materi.materi_resource) {
+          if (resource.type === "file" && resource.path_file) {
+            // Cek apakah file digunakan oleh materi lain (id_materi berbeda)
+            const isUsedByOther = await prisma.materi_resource.findFirst({
+              where: {
+                path_file: resource.path_file,
+                id_materi: { not: idMateriInt },
+              },
+            });
+
+            // Jika tidak digunakan oleh materi lain, hapus file fisiknya
+            if (!isUsedByOther) {
+              const filePath = path.join(PROJECT_ROOT, resource.path_file);
+              if (fs.existsSync(filePath)) {
+                try {
+                  fs.unlinkSync(filePath);
+                } catch (err) {
+                  console.error(`Gagal menghapus file: ${filePath}`, err);
+                }
+              }
+            }
+          }
+        }
+      }
+
+      // 3. Hapus Materi dari Database
+      // onDelete: Cascade pada schema akan otomatis menghapus materi_resource terkait
+      await prisma.materi.delete({
+        where: { id: idMateriInt },
+      });
+
+      return res.status(200).json({
+        message: "Materi berhasil dihapus beserta resource-nya.",
+      });
+    } catch (error) {
+      console.error("Gagal menghapus materi:", error);
+      return res.status(500).json({
+        message: "Terjadi kesalahan server saat menghapus materi.",
+        error: error.message,
+      });
+    }
+  }
+);
+
 // test midleware
 router.post(
   "/testing-midleware-campus",
