@@ -205,11 +205,13 @@ model program_mentor {
 model program_feedback {
   id         Int     @id @default(autoincrement())
   id_program Int
+  id_mentee  Int
   rating     Int
   evaluation String  @db.Text
   program    program @relation(fields: [id_program], references: [id], onDelete: Cascade, map: "program_feedback_ibfk_1")
 
   @@index([id_program], map: "id_program")
+  @@index([id_mentee], map: "id_mentee")
 }
 
 enum visibility_materi {

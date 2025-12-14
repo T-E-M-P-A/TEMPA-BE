@@ -1004,6 +1004,8 @@ router.get(
             select: {
               program_name: true,
               description: true,
+              start_program_date: true,
+              end_program_date: true,
             },
           },
           // Sertakan semua resource (file/video/kuis) untuk setiap materi
@@ -1023,6 +1025,8 @@ router.get(
           select: {
             program_name: true,
             description: true,
+            end_program_date: true,
+            start_program_date: true,
           },
         });
 
@@ -1041,6 +1045,8 @@ router.get(
             {
               program_name: programData.program_name,
               program_description: programData.description,
+              end_program_date: programData.end_program_date,
+              start_program_date: programData.start_program_date,
               resources: [],
               // Berikan properti materi minimal agar frontend bisa membaca
               title: null,
@@ -1074,6 +1080,8 @@ router.get(
           ...materiData,
           program_name: program.program_name,
           program_description: program.description,
+          end_program_date: program.end_program_date,
+          start_program_date: program.start_program_date,
           resources: formattedResources, // Masukkan resource yang sudah diformat
         };
 
