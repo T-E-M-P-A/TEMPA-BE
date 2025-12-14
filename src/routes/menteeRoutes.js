@@ -1110,6 +1110,86 @@ router.get(
   }
 );
 
+// give feedback to program
+router.post(
+  "/mentee/program-feedback/:idProgram",
+  authenticateUser,
+  authorizeRoles(["mentee"]),
+  async (req, res) => {
+    const idMentee = req.user.id;
+    const { idProgram } = req.params;
+    const { rating, feedback } = req.body;
+    const idProgramInt = parseInt(idProgram);
+
+    if (isNaN(idProgramInt)) {
+      return res.status(400).json({ message: "ID Program tidak valid." });
+    }
+
+    if (!rating || !feedback) {
+      return res.status(400).json({
+        message: "Rating dan evaluasi wajib diisi.",
+      });
+    }
+
+    try {
+      // 1. Cek apakah program ada
+      const program = await prisma.program.findUnique({
+        where: { id: idProgramInt },
+      });
+
+      if (!program) {
+        return res.status(404).json({ message: "Program tidak ditemukan." });
+      }
+
+      // 2. Cek apakah mentee terdaftar di program tersebut
+      const isEnrolled = await prisma.mentee_progress.findFirst({
+        where: {
+          id_mentee: idMentee,
+          id_program: idProgramInt,
+        },
+      });
+
+      if (!isEnrolled) {
+        return res.status(403).json({
+          message:
+            "Anda tidak terdaftar di program ini, tidak bisa memberikan feedback.",
+        });
+      }
+
+      // 3. Simpan feedback
+      const newFeedback = await prisma.program_feedback.create({
+        data: {
+          id_program: idProgramInt,
+          id_mentee: idMentee,
+          rating: parseInt(rating),
+          evaluation: feedback,
+        },
+      });
+
+      const changeCompletionStatus = await prisma.mentee_progress.update({
+        where: {
+          id: isEnrolled.id,
+        },
+        data: {
+          completion_status: "completed",
+          completion_date: new Date(),
+        },
+      });
+
+      return res.status(201).json({
+        message: "Feedback berhasil dikirim.",
+        data: newFeedback,
+      });
+    } catch (error) {
+      console.error("Gagal mengirim feedback:", error);
+      return res.status(500).json({
+        message: "Terjadi kesalahan server saat mengirim feedback.",
+        error: error.message,
+      });
+    }
+  }
+);
+
 // test midleware
 router.post(
   "/testing-midleware-mentee",
