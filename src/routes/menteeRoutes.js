@@ -101,16 +101,18 @@ router.get(
               end_program_date: true,
               capacity: true,
               path_gambar: true,
+              onsiteLocationName: true,
+              type_sesi: true,
 
               // get sesi program
-              sesi_program: {
-                select: {
-                  id: true,
-                  type_sesi: true,
-                  description: true,
-                  sesi_date: true,
-                },
-              },
+              // sesi_program: {
+              //   select: {
+              //     id: true,
+              //     type_sesi: true,
+              //     description: true,
+              //     sesi_date: true,
+              //   },
+              // },
 
               // get major program
               campus_program_id_majorTocampus: {
@@ -171,6 +173,8 @@ router.get(
             start_date: item.program.start_program_date,
             end_date: item.program.end_program_date,
             capacity: item.program.capacity,
+            onsiteLocationName: item.program.onsiteLocationName,
+            type_sesi: item.program.type_sesi,
 
             // KOREKSI: Gunakan finalPath yang sudah dipotong dan dibersihkan
             image_url: finalPath ? `${BASE_URL}/public/${finalPath}` : null,

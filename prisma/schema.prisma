@@ -113,6 +113,7 @@ model program {
   mentee_progress                  mentee_progress[]
   campus_program_id_campusTocampus campus                 @relation("program_id_campusTocampus", fields: [id_campus], references: [id], onDelete: Cascade, map: "program_ibfk_2")
   campus_program_id_majorTocampus  major                  @relation("program_id_majorTocampus", fields: [id_major], references: [id], onDelete: Cascade, map: "program_ibfk_3")
+  program_feedback                 program_feedback[]
   program_mentor                   program_mentor[]
   sesi_program                     sesi_program[]
 
@@ -198,6 +199,16 @@ model program_mentor {
   program    program @relation(fields: [id_program], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "program_mentor_ibfk_2")
 
   @@index([id_mentor], map: "id_mentor")
+  @@index([id_program], map: "id_program")
+}
+
+model program_feedback {
+  id         Int     @id @default(autoincrement())
+  id_program Int
+  rating     Int
+  evaluation String  @db.Text
+  program    program @relation(fields: [id_program], references: [id], onDelete: Cascade, map: "program_feedback_ibfk_1")
+
   @@index([id_program], map: "id_program")
 }
 
