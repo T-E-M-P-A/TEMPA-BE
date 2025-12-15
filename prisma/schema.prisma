@@ -86,33 +86,32 @@ model major {
 }
 
 model program {
-  id                               Int                    @id @default(autoincrement())
-  program_name                     String                 @db.VarChar(225)
-  description                      String                 @db.Text
-  start_program_date               DateTime               @db.Date
-  end_program_date                 DateTime               @db.Date
-  start_regis_date                 DateTime?              @db.Date
-  end_regis_date                   DateTime?              @db.Date
-  onsiteLocationName               String?                @db.Text
-  create_at                        DateTime               @db.Timestamp(0)
-  update_at                        DateTime               @db.Timestamp(0)
+  id                               Int                 @id @default(autoincrement())
+  program_name                     String              @db.VarChar(225)
+  description                      String              @db.Text
+  start_program_date               DateTime            @db.Date
+  end_program_date                 DateTime            @db.Date
+  start_regis_date                 DateTime?           @db.Date
+  end_regis_date                   DateTime?           @db.Date
+  onsiteLocationName               String?             @db.Text
+  create_at                        DateTime            @db.Timestamp(0)
+  update_at                        DateTime            @db.Timestamp(0)
   capacity                         Int
-  program_status                   program_program_status
   id_campus                        Int
   id_major                         Int
-  path_gambar                      String?                @db.Text
+  path_gambar                      String?             @db.Text
   benefit                          Json
   terms_and_conditions             Json
   type_sesi                        program_type_sesi
-  sesi_start                       DateTime               @db.Time(0)
-  sesi_end                         DateTime               @db.Time(0)
+  sesi_start                       DateTime            @db.Time(0)
+  sesi_end                         DateTime            @db.Time(0)
   visibility                       program_visibility?
-  lat                              Float?                 @db.Float
-  lng                              Float?                 @db.Float
+  lat                              Float?              @db.Float
+  lng                              Float?              @db.Float
   materi                           materi[]
   mentee_progress                  mentee_progress[]
-  campus_program_id_campusTocampus campus                 @relation("program_id_campusTocampus", fields: [id_campus], references: [id], onDelete: Cascade, map: "program_ibfk_2")
-  campus_program_id_majorTocampus  major                  @relation("program_id_majorTocampus", fields: [id_major], references: [id], onDelete: Cascade, map: "program_ibfk_3")
+  campus_program_id_campusTocampus campus              @relation("program_id_campusTocampus", fields: [id_campus], references: [id], onDelete: Cascade, map: "program_ibfk_2")
+  campus_program_id_majorTocampus  major               @relation("program_id_majorTocampus", fields: [id_major], references: [id], onDelete: Cascade, map: "program_ibfk_3")
   program_feedback                 program_feedback[]
   program_mentor                   program_mentor[]
   sesi_program                     sesi_program[]
@@ -233,11 +232,6 @@ enum mentee_progress_completion_status {
   completed
   on_going    @map("on going")
   uncompleted
-}
-
-enum program_program_status {
-  open
-  closed
 }
 
 enum sesi_program_type_sesi {

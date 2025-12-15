@@ -565,7 +565,6 @@ router.post(
       const existingEnrollment = await prisma.mentee_progress.findFirst({
         where: {
           id_mentee: idMentee,
-          // PERHATIAN: Pastikan Anda menggunakan idProgram, BUKAN idMentee, di sini
           id_program: idProgramInt,
         },
       });
@@ -587,7 +586,6 @@ router.post(
           id: idProgramInt,
         },
         select: {
-          program_status: true,
           capacity: true,
         },
       });
@@ -596,7 +594,13 @@ router.post(
         return res.status(404).json({ message: "Program tidak ditemukan." });
       }
 
-      if (programData.program_status === "closed") {
+      if (new Date(programData.end_regis_date) < new Date()) {
+        return res.status(409).json({
+          message: "Pendaftaran sudah tutup!",
+        });
+      }
+
+      if (new Date(programData.end_program_date) < new Date()) {
         return res.status(409).json({
           message: "Program sudah tutup/selesai!",
         });
