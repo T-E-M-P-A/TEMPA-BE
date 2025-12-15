@@ -725,6 +725,74 @@ router.get(
 );
 
 // =======================================================================
+// 6.1. GET PROGRAM FEEDBACK
+// =======================================================================
+router.get(
+  "/get-program-feedback/:id",
+  authenticateUser,
+  authorizeRoles(["campus"]),
+  async (req, res) => {
+    const idCampus = req.user.id;
+    const idProgram = parseInt(req.params.id);
+
+    if (isNaN(idProgram)) {
+      return res.status(400).json({
+        message: "ID Program tidak valid. Harus berupa angka.",
+      });
+    }
+
+    try {
+      // Cek apakah program milik kampus
+      const program = await prisma.program.findFirst({
+        where: {
+          id: idProgram,
+          id_campus: idCampus,
+        },
+      });
+
+      if (!program) {
+        return res.status(404).json({
+          message: "Program tidak ditemukan atau bukan milik kampus ini.",
+        });
+      }
+
+      const feedbacks = await prisma.program_feedback.findMany({
+        where: {
+          id_program: idProgram,
+        },
+        include: {
+          mentee: {
+            select: {
+              username: true,
+              email: true,
+            },
+          },
+        },
+      });
+
+      const formattedFeedbacks = feedbacks.map((item) => ({
+        id: item.id,
+        rating: item.rating,
+        evaluation: item.evaluation,
+        username: item.mentee?.username || "Unknown",
+        email: item.mentee?.email,
+      }));
+
+      return res.status(200).json({
+        message: "Data feedback program berhasil diambil.",
+        data: formattedFeedbacks,
+      });
+    } catch (error) {
+      console.error("Error fetching program feedback:", error);
+      return res.status(500).json({
+        message: "Terjadi kesalahan server saat mengambil feedback.",
+        error: error.message,
+      });
+    }
+  }
+);
+
+// =======================================================================
 // 7. GET DATA CAMPUS FOR VALIDATION (Menggunakan Python)
 // =======================================================================
 router.get("/validate-campus/:campusName", (req, res) => {
