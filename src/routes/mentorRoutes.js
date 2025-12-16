@@ -49,6 +49,8 @@ router.post("/login-mentor", async (req, res) => {
       {
         id: mentor.id,
         username: mentor.name,
+        nik: mentor.nik,
+        mentorType: mentor.mentor_type,
         role: "mentor",
       },
       JWT_SECRET,
@@ -67,6 +69,58 @@ router.post("/login-mentor", async (req, res) => {
     });
   }
 });
+
+// get program campus for chart
+router.get(
+  "/get-program-campus-chart",
+  authenticateUser,
+  authorizeRoles(["mentor"]),
+  async (req, res) => {
+    const idMentor = req.user.id;
+    try {
+      const getProgramCampus = await prisma.program_mentor.findMany({
+        where: {
+          id_mentor: idMentor,
+        },
+        select: {
+          program: {
+            select: {
+              id: true,
+              program_name: true,
+              _count: {
+                select: {
+                  mentee_progress: true,
+                },
+              },
+            },
+          },
+        },
+      });
+
+      // get count total mentee
+      const programsWithMenteeCount = getProgramCampus.map((item) => ({
+        id: item.program.id,
+        program_name: item.program.program_name,
+        // Total mentee diambil dari hasil perhitungan _count
+        total_mentee: item.program._count.mentee_progress,
+      }));
+
+      console.log(programsWithMenteeCount);
+
+      return res.status(200).json({
+        message: "Data program beserta total mentee berhasil diambil",
+        total_program: programsWithMenteeCount.length,
+        data: programsWithMenteeCount,
+      });
+    } catch (error) {
+      console.error(error);
+      return res.status(500).json({
+        message: "Terjadi kesalahan saat mengambil data program",
+        error: error.message,
+      });
+    }
+  }
+);
 
 // test midleware
 router.post(

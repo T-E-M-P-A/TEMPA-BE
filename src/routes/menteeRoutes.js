@@ -209,6 +209,9 @@ router.get(
   async (req, res) => {
     try {
       const getAllProgram = await prisma.program.findMany({
+        where: {
+          visibility: "public",
+        },
         include: {
           campus_program_id_campusTocampus: {
             select: {

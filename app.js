@@ -31,7 +31,7 @@ app.use("/api/v1", adminRoutes);
 app.use("/api/v1", campusRoutes);
 
 // mentor route
-app.use("/api/v1", mentorRoutes);
+app.use("/api/v1/mentor", mentorRoutes);
 
 app.listen(port, () => {
   console.log(`Listening on port ${port}...`);
