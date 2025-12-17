@@ -48,6 +48,37 @@ const uploadProgramImage = multer({
   },
 });
 
+// =======================================================================
+// MULTER CONFIG FOR MATERI FILES
+// =======================================================================
+const materiFileStorage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    const dir = "uploads/program_materi";
+    if (!fs.existsSync(dir)) {
+      fs.mkdirSync(dir, { recursive: true });
+    }
+    cb(null, dir);
+  },
+  filename: (req, file, cb) => {
+    const dir = "uploads/program_materi";
+    let fileName = file.originalname.replace(/\s+/g, "-");
+    const ext = path.extname(fileName);
+    const baseName = path.basename(fileName, ext);
+    let counter = 1;
+
+    while (fs.existsSync(path.join(dir, fileName))) {
+      fileName = `${baseName}_${counter}${ext}`;
+      counter++;
+    }
+    cb(null, fileName);
+  },
+});
+
+const uploadMateriFiles = multer({
+  storage: materiFileStorage,
+  limits: { fileSize: 100 * 1024 * 1024 }, // 100 MB limit
+});
+
 // login admin
 router.post("/login-mentor", async (req, res) => {
   const { nik, password } = req.body;
@@ -849,6 +880,132 @@ router.get(
       console.error(error);
       return res.status(500).json({
         message: "Terjadi kesalahan server saat mengambil data jurusan.",
+      });
+    }
+  }
+);
+
+// =======================================================================
+// ADD MATERI TO PROGRAM
+// =======================================================================
+router.post(
+  "/add-materi/:idProgram",
+  authenticateUser,
+  authorizeRoles(["mentor"]),
+  uploadMateriFiles.single("file"),
+  async (req, res) => {
+    const idMentor = req.user.id;
+    const { idProgram } = req.params;
+    const { title, description, visibility, type, url } = req.body;
+
+    const idProgramInt = parseInt(idProgram, 10);
+
+    // Validasi ID Program
+    if (isNaN(idProgramInt)) {
+      return res.status(400).json({ message: "ID Program tidak valid." });
+    }
+
+    // Validasi Input Wajib
+    if (!title || !description) {
+      // Hapus file yang sudah terlanjur diupload jika validasi gagal
+      if (req.file && fs.existsSync(req.file.path)) {
+        fs.unlinkSync(req.file.path);
+      }
+      return res.status(400).json({
+        message:
+          "Judul (title) dan deskripsi (description) materi wajib diisi.",
+      });
+    }
+
+    try {
+      // 1. Verifikasi Kepemilikan Program (Mentor assigned to program)
+      const program = await prisma.program.findFirst({
+        where: {
+          id: idProgramInt,
+          program_mentor: {
+            some: {
+              id_mentor: idMentor,
+            },
+          },
+        },
+      });
+
+      if (!program) {
+        if (req.file && fs.existsSync(req.file.path)) {
+          fs.unlinkSync(req.file.path);
+        }
+        return res.status(404).json({
+          message: "Program tidak ditemukan atau Anda tidak memiliki akses.",
+        });
+      }
+
+      // 2. Siapkan Data Resource (File)
+      let resourcePath = "";
+
+      if (type === "file") {
+        if (!req.file) {
+          return res.status(400).json({
+            message: "File wajib diunggah untuk tipe materi 'file'.",
+          });
+        }
+        resourcePath = `uploads/program_materi/${req.file.filename}`;
+      } else if (type === "kuis" || type === "video") {
+        if (!url) {
+          if (req.file && fs.existsSync(req.file.path))
+            fs.unlinkSync(req.file.path);
+          return res.status(400).json({
+            message: `URL wajib diisi untuk tipe materi '${type}'.`,
+          });
+        }
+        resourcePath = url;
+        // Jika user tidak sengaja upload file tapi pilih type kuis/video, hapus filenya
+        if (req.file && fs.existsSync(req.file.path))
+          fs.unlinkSync(req.file.path);
+      } else {
+        if (req.file && fs.existsSync(req.file.path))
+          fs.unlinkSync(req.file.path);
+        return res.status(400).json({
+          message:
+            "Tipe materi tidak valid. Gunakan 'file', 'kuis', atau 'video'.",
+        });
+      }
+
+      // 3. Simpan Materi dan Resource ke Database
+      const newMateri = await prisma.materi.create({
+        data: {
+          title: title,
+          description: description,
+          visibility: visibility || "public", // Default public
+          id_program: idProgramInt,
+          create_at: new Date(),
+          update_at: new Date(),
+          materi_resource: {
+            create: [
+              {
+                type: type,
+                path_file: resourcePath,
+              },
+            ],
+          },
+        },
+        include: {
+          materi_resource: true,
+        },
+      });
+
+      return res.status(201).json({
+        message: "Materi berhasil ditambahkan ke program.",
+        data: newMateri,
+      });
+    } catch (error) {
+      // Hapus file jika terjadi error database
+      if (req.file && fs.existsSync(req.file.path)) {
+        fs.unlinkSync(req.file.path);
+      }
+      console.error("Gagal menambahkan materi:", error);
+      return res.status(500).json({
+        message: "Terjadi kesalahan server saat menambahkan materi.",
+        error: error.message,
       });
     }
   }
