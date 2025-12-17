@@ -1331,6 +1331,99 @@ router.put(
   }
 );
 
+// =======================================================================
+// DELETE MATERI BY ID
+// =======================================================================
+router.delete(
+  "/delete-materi/:idMateri",
+  authenticateUser,
+  authorizeRoles(["mentor"]),
+  async (req, res) => {
+    const idMentor = req.user.id;
+    const { idMateri } = req.params;
+    const idMateriInt = parseInt(idMateri, 10);
+
+    if (isNaN(idMateriInt)) {
+      return res.status(400).json({ message: "ID Materi tidak valid." });
+    }
+
+    try {
+      // 1. Cari Materi dan Verifikasi Kepemilikan
+      const materi = await prisma.materi.findFirst({
+        where: { id: idMateriInt },
+        include: {
+          program: {
+            include: {
+              program_mentor: {
+                where: {
+                  id_mentor: idMentor,
+                },
+              },
+            },
+          },
+          materi_resource: true,
+        },
+      });
+
+      if (!materi) {
+        return res.status(404).json({ message: "Materi tidak ditemukan." });
+      }
+
+      // Verifikasi apakah mentor terdaftar di program materi ini
+      const isMentorAssigned =
+        materi.program && materi.program.program_mentor.length > 0;
+
+      if (!isMentorAssigned) {
+        return res.status(403).json({
+          message: "Anda tidak memiliki akses untuk menghapus materi ini.",
+        });
+      }
+
+      // 2. Hapus File Fisik (jika tidak digunakan oleh materi lain)
+      if (materi.materi_resource && materi.materi_resource.length > 0) {
+        for (const resource of materi.materi_resource) {
+          if (resource.type === "file" && resource.path_file) {
+            // Cek apakah file digunakan oleh materi lain (id_materi berbeda)
+            const isUsedByOther = await prisma.materi_resource.findFirst({
+              where: {
+                path_file: resource.path_file,
+                id_materi: { not: idMateriInt },
+              },
+            });
+
+            // Jika tidak digunakan oleh materi lain, hapus file fisiknya
+            if (!isUsedByOther) {
+              const filePath = path.join(process.cwd(), resource.path_file);
+              if (fs.existsSync(filePath)) {
+                try {
+                  fs.unlinkSync(filePath);
+                } catch (err) {
+                  console.error(`Gagal menghapus file: ${filePath}`, err);
+                }
+              }
+            }
+          }
+        }
+      }
+
+      // 3. Hapus Materi dari Database
+      await prisma.materi.delete({
+        where: { id: idMateriInt },
+      });
+
+      return res.status(200).json({
+        message: "Materi berhasil dihapus beserta resource-nya.",
+      });
+    } catch (error) {
+      console.error("Gagal menghapus materi:", error);
+      return res.status(500).json({
+        message: "Terjadi kesalahan server saat menghapus materi.",
+        error: error.message,
+      });
+    }
+  }
+);
+
 // delete program by id for mentor
 router.delete(
   "/delete-program/:id",
