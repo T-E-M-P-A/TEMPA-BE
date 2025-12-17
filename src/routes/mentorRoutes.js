@@ -5,10 +5,48 @@ import jwt from "jsonwebtoken";
 import authenticateUser from "../middlewares/auth.js";
 import authorizeRoles from "../middlewares/roles.js";
 import formatPathToUrl from "../controllers/formatPathUrl.js";
+import multer from "multer";
+import fs from "fs";
+import path from "path";
 
 const router = express.Router();
 const JWT_SECRET = process.env.JWT_SECRET;
 const BASE_URL = process.env.API_BASE_URL;
+
+// =======================================================================
+// MULTER CONFIG FOR PROGRAM IMAGE
+// =======================================================================
+const programImageStorage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    const dir = "uploads/program_images";
+    // Buat direktori jika belum ada
+    if (!fs.existsSync(dir)) {
+      fs.mkdirSync(dir, { recursive: true });
+    }
+    cb(null, dir);
+  },
+  filename: (req, file, cb) => {
+    const uniqueSuffix = Date.now() + "-" + Math.round(Math.random() * 1e9);
+    cb(null, "program-" + uniqueSuffix + path.extname(file.originalname));
+  },
+});
+
+const uploadProgramImage = multer({
+  storage: programImageStorage,
+  limits: { fileSize: 5 * 1024 * 1024 }, // 5 MB limit
+  fileFilter: (req, file, cb) => {
+    const fileTypes = /jpeg|jpg|png|gif/;
+    const extname = fileTypes.test(
+      path.extname(file.originalname).toLowerCase()
+    );
+    const mimetype = fileTypes.test(file.mimetype);
+    if (mimetype && extname) {
+      return cb(null, true);
+    } else {
+      cb(new Error("Hanya file gambar (jpeg, jpg, png, gif) yang diizinkan!"));
+    }
+  },
+});
 
 // login admin
 router.post("/login-mentor", async (req, res) => {
@@ -365,6 +403,239 @@ router.get(
         message: "Terjadi kesalahan server saat mengambil detail program.",
         error: error.message,
       });
+    }
+  }
+);
+
+// edit program by id for mentor
+router.put(
+  "/edit-program/:id",
+  authenticateUser,
+  authorizeRoles(["mentor"]),
+  uploadProgramImage.single("bannerImage"), // Middleware untuk handle upload gambar
+  async (req, res) => {
+    const idMentor = req.user.id;
+    const { id } = req.params;
+    const idProgram = parseInt(id, 10);
+
+    if (isNaN(idProgram)) {
+      return res
+        .status(400)
+        .json({ message: "ID Program tidak valid. Harus berupa angka." });
+    }
+
+    const {
+      name,
+      majorName, // Ini adalah ID jurusan
+      programType,
+      visibility,
+      startRegisDate,
+      endRegisDate,
+      startDateProgram,
+      endDateProgram,
+      startTime,
+      endTime,
+      capacity,
+      description,
+      benefits,
+      terms,
+      onsiteLocationName,
+      mapLat,
+      mapLng,
+    } = req.body;
+
+    try {
+      // 1. Cari program yang akan di-edit untuk verifikasi akses mentor
+      const existingProgram = await prisma.program.findFirst({
+        where: {
+          id: idProgram,
+          program_mentor: {
+            some: {
+              id_mentor: idMentor,
+            },
+          },
+        },
+      });
+
+      if (!existingProgram) {
+        return res.status(404).json({
+          message:
+            "Program tidak ditemukan atau Anda tidak memiliki akses untuk mengeditnya.",
+        });
+      }
+
+      // 2. Validasi Major ID baru (jika diubah)
+      const majorId = parseInt(majorName, 10);
+      if (isNaN(majorId)) {
+        return res
+          .status(400)
+          .json({ message: "Format ID Jurusan tidak valid." });
+      }
+
+      // Pastikan jurusan milik kampus yang sama dengan program
+      const major = await prisma.major.findFirst({
+        where: { id: majorId, id_campus: existingProgram.id_campus },
+      });
+
+      if (!major) {
+        return res.status(404).json({
+          message: `Jurusan dengan ID '${majorId}' tidak ditemukan atau bukan milik kampus program ini.`,
+        });
+      }
+
+      // Helper untuk menangani field yang bisa berupa string atau array dari FormData
+      const processMultiPartArray = (field) => {
+        if (!field) return [];
+        if (Array.isArray(field)) return field.map((item) => item.trim());
+        return [field.trim()];
+      };
+
+      // 3. Siapkan data yang akan di-update
+      const dataToUpdate = {
+        program_name: name,
+        id_major: majorId,
+        type_sesi: programType,
+        visibility: visibility,
+        start_regis_date: new Date(startRegisDate),
+        end_regis_date: new Date(endRegisDate),
+        start_program_date: new Date(startDateProgram),
+        end_program_date: new Date(endDateProgram),
+        sesi_start: new Date(`1970-01-01T${startTime}:00`),
+        sesi_end: new Date(`1970-01-01T${endTime}:00`),
+        capacity: parseInt(capacity, 10),
+        description: description,
+        benefit: processMultiPartArray(benefits),
+        terms_and_conditions: processMultiPartArray(terms),
+        update_at: new Date(),
+      };
+
+      // 4. Handle upload gambar baru (jika ada)
+      if (req.file) {
+        // Hapus gambar lama jika ada
+        if (existingProgram.path_gambar) {
+          const oldImagePath = path.join(
+            process.cwd(),
+            existingProgram.path_gambar
+          );
+          if (fs.existsSync(oldImagePath)) {
+            fs.unlink(oldImagePath, (err) => {
+              if (err)
+                console.error(
+                  "Gagal menghapus gambar lama:",
+                  oldImagePath,
+                  err
+                );
+            });
+          }
+        }
+        // Tambahkan path gambar baru ke data yang akan di-update
+        dataToUpdate.path_gambar = req.file.path.replace(/\\/g, "/");
+      }
+
+      // 5. Handle data kondisional untuk program 'onsite'
+      if (programType === "onsite") {
+        const parsedLat = parseFloat(mapLat);
+        const parsedLng = parseFloat(mapLng);
+
+        if (!onsiteLocationName || isNaN(parsedLat) || isNaN(parsedLng)) {
+          return res.status(400).json({
+            message:
+              "Untuk program onsite, nama lokasi, latitude, dan longitude wajib diisi.",
+          });
+        }
+        dataToUpdate.onsiteLocationName = onsiteLocationName;
+        dataToUpdate.lat = parsedLat;
+        dataToUpdate.lng = parsedLng;
+      } else {
+        // Jika tipe program diubah dari onsite ke online, hapus data lokasi
+        dataToUpdate.onsiteLocationName = null;
+        dataToUpdate.lat = null;
+        dataToUpdate.lng = null;
+      }
+
+      // 6. Lakukan update di database
+      const updatedProgram = await prisma.program.update({
+        where: { id: idProgram },
+        data: dataToUpdate,
+      });
+
+      return res.status(200).json({
+        message: "Program berhasil diperbarui.",
+        data: updatedProgram,
+      });
+    } catch (error) {
+      // Jika terjadi error setelah file diunggah, hapus file tersebut
+      if (req.file) {
+        fs.unlink(req.file.path, (err) => {
+          if (err)
+            console.error(
+              "Gagal menghapus file yang baru diunggah setelah error:",
+              err
+            );
+        });
+      }
+
+      console.error("Gagal mengedit program:", error);
+      if (error.code === "P2025") {
+        return res.status(404).json({ message: "Program tidak ditemukan." });
+      }
+      return res.status(500).json({
+        message: "Terjadi kesalahan server saat mengedit program.",
+        error: error.message,
+      });
+    }
+  }
+);
+
+// get major campus
+router.get(
+  "/all-majors",
+  authenticateUser,
+  authorizeRoles(["mentor"]),
+  async (req, res) => {
+    const idMentor = req.user.id;
+
+    try {
+      // Cari data mentor untuk mendapatkan id_campus
+      const mentor = await prisma.mentor.findUnique({
+        where: {
+          id: idMentor,
+        },
+        select: {
+          id_campus: true,
+        },
+      });
+
+      if (!mentor) {
+        return res
+          .status(404)
+          .json({ message: "Data mentor tidak ditemukan." });
+      }
+
+      const allMajors = await prisma.major.findMany({
+        where: {
+          id_campus: mentor.id_campus,
+        },
+        include: {
+          standard_major: true,
+        },
+      });
+
+      if (!allMajors || allMajors.length === 0) {
+        return res.status(404).json({ message: "Data Jurusan tidak ada." });
+      }
+
+      return res.status(200).json({
+        message: "Data Jurusan ditemukan",
+        data: allMajors,
+      });
+    } catch (error) {
+      console.error(error);
+      return res
+        .status(500)
+        .json({
+          message: "Terjadi kesalahan server saat mengambil data jurusan.",
+        });
     }
   }
 );
