@@ -1011,6 +1011,326 @@ router.post(
   }
 );
 
+// =======================================================================
+// EDIT MATERI AND ADD RESOURCES
+// =======================================================================
+router.put(
+  "/edit-materi/:idMateri",
+  authenticateUser,
+  authorizeRoles(["mentor"]),
+  uploadMateriFiles.any(),
+  async (req, res) => {
+    const idMentor = req.user.id;
+    const { idMateri } = req.params;
+    const { title, description, visibility } = req.body;
+
+    const idMateriInt = parseInt(idMateri, 10);
+
+    // Helper untuk menghapus file jika terjadi error
+    const cleanupFiles = (files) => {
+      if (files && Array.isArray(files)) {
+        files.forEach((file) => {
+          if (fs.existsSync(file.path)) fs.unlinkSync(file.path);
+        });
+      }
+    };
+
+    const normalizeResourcePath = (inputPath) => {
+      if (!inputPath) return "";
+      inputPath = inputPath.replace(/^https?:\/\/[^/]+\/public\//, "");
+      const parts = inputPath.split("program_materi/");
+      if (parts.length < 2) return "";
+      return `program_materi/${parts[1]}`;
+    };
+
+    if (isNaN(idMateriInt)) {
+      cleanupFiles(req.files);
+      return res.status(400).json({ message: "ID Materi tidak valid." });
+    }
+
+    try {
+      // 1. Cari Materi dan Verifikasi Kepemilikan
+      const materi = await prisma.materi.findFirst({
+        where: { id: idMateriInt },
+        include: {
+          program: {
+            include: {
+              program_mentor: {
+                where: {
+                  id_mentor: idMentor,
+                },
+              },
+            },
+          },
+          materi_resource: true,
+        },
+      });
+
+      if (!materi) {
+        cleanupFiles(req.files);
+        return res.status(404).json({ message: "Materi tidak ditemukan." });
+      }
+
+      // Verifikasi apakah mentor terdaftar di program materi ini
+      const isMentorAssigned =
+        materi.program && materi.program.program_mentor.length > 0;
+
+      if (!isMentorAssigned) {
+        cleanupFiles(req.files);
+        return res.status(403).json({
+          message: "Anda tidak memiliki akses untuk mengedit materi ini.",
+        });
+      }
+
+      // 2. Parsing new_resources dari req.body dan req.files
+      const newResourcesMap = {};
+
+      // Helper to safely set resource data
+      const setResourceData = (index, key, value) => {
+        if (!newResourcesMap[index]) newResourcesMap[index] = {};
+        newResourcesMap[index][key] = value;
+      };
+
+      // Cek jika new_resources sudah berupa array/objek (parsed body)
+      if (
+        req.body.new_resources &&
+        typeof req.body.new_resources === "object"
+      ) {
+        Object.keys(req.body.new_resources).forEach((index) => {
+          const item = req.body.new_resources[index];
+          if (item && typeof item === "object") {
+            Object.keys(item).forEach((key) => {
+              setResourceData(index, key, item[key]);
+            });
+          }
+        });
+      }
+
+      // Parse field teks (type, url, dll)
+      Object.keys(req.body).forEach((key) => {
+        const match = key.match(/^new_resources\[(\d+)\]\[(\w+)\]$/);
+        if (match) {
+          setResourceData(match[1], match[2], req.body[key]);
+        }
+      });
+
+      // Map file yang diupload ke index yang sesuai
+      if (req.files) {
+        req.files.forEach((file) => {
+          // Fieldname format: new_resources[0][file]
+          const match = file.fieldname.match(
+            /^new_resources\[(\d+)\]\[file\]$/
+          );
+          if (match) {
+            setResourceData(match[1], "file", file);
+          }
+        });
+      }
+
+      const newResources = Object.values(newResourcesMap);
+      // Filter resource yang memiliki type ATAU memiliki file (jika type lupa dikirim)
+      const validNewResources = newResources.filter(
+        (res) => res.type || res.file
+      );
+
+      // 3. Kelola Resource Lama (Keep dan Delete)
+      let keptResourceIds = [];
+
+      if (req.body.kept_resource_ids) {
+        if (Array.isArray(req.body.kept_resource_ids)) {
+          keptResourceIds = req.body.kept_resource_ids.map((id) =>
+            parseInt(id, 10)
+          );
+        } else if (typeof req.body.kept_resource_ids === "object") {
+          keptResourceIds = Object.values(req.body.kept_resource_ids).map(
+            (id) => parseInt(id, 10)
+          );
+        } else {
+          keptResourceIds = [parseInt(req.body.kept_resource_ids, 10)];
+        }
+      }
+
+      Object.keys(req.body).forEach((key) => {
+        const match = key.match(/^kept_resource_ids\[(\d+)\]$/);
+        if (match) {
+          keptResourceIds.push(parseInt(req.body[key], 10));
+        }
+      });
+
+      keptResourceIds = [...new Set(keptResourceIds.filter(Number.isInteger))];
+
+      // 4. Validasi dan Persiapan Data Resource Baru
+      const resourcesToCreate = [];
+
+      for (const [idx, resData] of validNewResources.entries()) {
+        let type = resData.type ? resData.type.trim().toLowerCase() : "";
+
+        if (!type && resData.file) {
+          type = "file";
+        }
+
+        let resourcePath = "";
+
+        if (type === "file") {
+          if (!resData.file) {
+            let isExistingFile = false;
+            if (resData.url) {
+              const normalizedUrl = normalizeResourcePath(resData.url);
+              const existingRes = materi.materi_resource.find(
+                (r) =>
+                  r.type === "file" &&
+                  normalizeResourcePath(r.path_file) === normalizedUrl
+              );
+
+              if (existingRes) {
+                keptResourceIds.push(existingRes.id);
+                continue;
+              }
+            }
+
+            if (isExistingFile) continue;
+
+            cleanupFiles(req.files);
+            return res.status(400).json({
+              message: "File wajib diunggah untuk resource bertipe 'file'.",
+            });
+          }
+          resourcePath = `uploads/program_materi/${resData.file.filename}`;
+        } else if (type === "kuis" || type === "video") {
+          const urlValue = resData.url || resData.path_file;
+
+          if (!urlValue) {
+            cleanupFiles(req.files);
+            return res.status(400).json({
+              message: `URL wajib diisi untuk tipe '${type}'.`,
+            });
+          }
+          resourcePath = urlValue;
+
+          if (resData.file && fs.existsSync(resData.file.path)) {
+            fs.unlinkSync(resData.file.path);
+          }
+        } else {
+          cleanupFiles(req.files);
+          return res.status(400).json({
+            message:
+              "Tipe resource tidak valid. Gunakan 'file', 'kuis', atau 'video'.",
+          });
+        }
+
+        resourcesToCreate.push({
+          id_materi: idMateriInt,
+          type: type,
+          path_file: resourcePath,
+        });
+      }
+
+      keptResourceIds = [...new Set(keptResourceIds)];
+
+      const existingResourceIds = materi.materi_resource.map((r) => r.id);
+      const resourcesToDeleteIds = existingResourceIds.filter(
+        (id) => !keptResourceIds.includes(id)
+      );
+
+      const keptCount = keptResourceIds.length;
+      const newCount = resourcesToCreate.length;
+
+      if (keptCount + newCount > 3) {
+        cleanupFiles(req.files);
+        return res.status(400).json({
+          message: `Gagal: Jumlah resource (lama + baru) melebihi batas (Max 3). Resource yang dipertahankan: ${keptCount}, Resource baru: ${newCount}.`,
+        });
+      }
+
+      const newResourcePaths = resourcesToCreate.map((r) => r.path_file);
+      const resourcesToDelete = materi.materi_resource.filter((r) =>
+        resourcesToDeleteIds.includes(r.id)
+      );
+
+      const idsToRescue = resourcesToDelete
+        .filter(
+          (r) => r.type === "file" && newResourcePaths.includes(r.path_file)
+        )
+        .map((r) => r.id);
+
+      const finalResourcesToDeleteIds = resourcesToDeleteIds.filter(
+        (id) => !idsToRescue.includes(id)
+      );
+
+      if (finalResourcesToDeleteIds.length > 0) {
+        const deletedFileResources = materi.materi_resource.filter(
+          (r) => r.type === "file" && finalResourcesToDeleteIds.includes(r.id)
+        );
+
+        for (const res of deletedFileResources) {
+          const isUsedElsewhere = await prisma.materi_resource.findFirst({
+            where: {
+              path_file: res.path_file,
+              id: { notIn: finalResourcesToDeleteIds },
+            },
+          });
+
+          const isReusedInNew = resourcesToCreate.some(
+            (newRes) => newRes.path_file === res.path_file
+          );
+
+          if (
+            !isUsedElsewhere &&
+            !isReusedInNew &&
+            fs.existsSync(res.path_file)
+          ) {
+            fs.unlinkSync(res.path_file);
+          }
+        }
+      }
+
+      const transactionQueries = [
+        prisma.materi.update({
+          where: { id: idMateriInt },
+          data: {
+            title: title,
+            description: description,
+            visibility: visibility,
+            update_at: new Date(),
+          },
+        }),
+        prisma.materi_resource.deleteMany({
+          where: {
+            id: { in: finalResourcesToDeleteIds },
+          },
+        }),
+      ];
+
+      if (resourcesToCreate.length > 0) {
+        transactionQueries.push(
+          prisma.materi_resource.createMany({
+            data: resourcesToCreate,
+          })
+        );
+      }
+
+      await prisma.$transaction(transactionQueries);
+
+      const finalMateri = await prisma.materi.findFirst({
+        where: { id: idMateriInt },
+        include: { materi_resource: true },
+      });
+
+      return res.status(200).json({
+        message: "Materi berhasil diperbarui.",
+        data: finalMateri,
+      });
+    } catch (error) {
+      cleanupFiles(req.files);
+      console.error("Gagal mengedit materi:", error);
+      return res.status(500).json({
+        message: "Terjadi kesalahan server saat mengedit materi.",
+        error: error.message,
+      });
+    }
+  }
+);
+
 // delete program by id for mentor
 router.delete(
   "/delete-program/:id",
