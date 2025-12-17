@@ -4,9 +4,11 @@ import bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
 import authenticateUser from "../middlewares/auth.js";
 import authorizeRoles from "../middlewares/roles.js";
+import formatPathToUrl from "../controllers/formatPathUrl.js";
 
 const router = express.Router();
 const JWT_SECRET = process.env.JWT_SECRET;
+const BASE_URL = process.env.API_BASE_URL;
 
 // login admin
 router.post("/login-mentor", async (req, res) => {
@@ -116,6 +118,78 @@ router.get(
       console.error(error);
       return res.status(500).json({
         message: "Terjadi kesalahan saat mengambil data program",
+        error: error.message,
+      });
+    }
+  }
+);
+
+// get program by mentor id
+router.get(
+  "/get-mentor-programs",
+  authenticateUser,
+  authorizeRoles(["mentor"]),
+  async (req, res) => {
+    const idMentor = req.user.id;
+
+    try {
+      const programMentor = await prisma.program_mentor.findMany({
+        where: {
+          id_mentor: idMentor,
+        },
+        include: {
+          program: {
+            include: {
+              campus_program_id_majorTocampus: {
+                include: {
+                  standard_major: {
+                    select: {
+                      major_name: true,
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+      });
+
+      const formattedPrograms = programMentor.map((pm) => {
+        const item = pm.program;
+        const imageUrl = formatPathToUrl(item.path_gambar, BASE_URL);
+
+        const majorName =
+          item.campus_program_id_majorTocampus?.standard_major?.major_name ||
+          null;
+
+        const newItem = {
+          id: item.id,
+          program_name: item.program_name,
+          description: item.description,
+          start_date: item.start_regis_date,
+          end_date: item.end_regis_date,
+          capacity: item.capacity,
+          program_status: item.program_status,
+          onsiteLocationName: item.onsiteLocationName,
+          major_name: majorName,
+          image_url: imageUrl,
+          sesi_program: item.type_sesi,
+          visibility: item.visibility,
+        };
+
+        return newItem;
+      });
+
+      console.log(formattedPrograms);
+
+      return res.status(200).json({
+        message: "Berhasil mengambil data program mentor",
+        data: formattedPrograms,
+      });
+    } catch (error) {
+      console.error(error);
+      return res.status(500).json({
+        message: "Terjadi kesalahan server",
         error: error.message,
       });
     }
