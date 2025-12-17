@@ -407,6 +407,222 @@ router.get(
   }
 );
 
+// create program for mentor
+router.post(
+  "/create-program",
+  authenticateUser,
+  authorizeRoles(["mentor"]),
+  uploadProgramImage.single("bannerImage"),
+  async (req, res) => {
+    const idMentor = req.user.id;
+
+    // Validasi file upload
+    if (!req.file) {
+      return res
+        .status(400)
+        .json({ message: "Gambar banner program wajib diunggah." });
+    }
+
+    const {
+      name,
+      majorName,
+      programType,
+      visibility,
+      startRegisDate,
+      endRegisDate,
+      startDateProgram,
+      endDateProgram,
+      startTime,
+      endTime,
+      capacity,
+      description,
+      benefits, // JSON string
+      terms, // JSON string
+      location_name,
+      mapLat,
+      mapLng,
+    } = req.body;
+
+    // Validasi field wajib
+    const requiredFields = {
+      name,
+      majorName,
+      programType,
+      visibility,
+      startRegisDate,
+      endRegisDate,
+      startDateProgram,
+      endDateProgram,
+      startTime,
+      endTime,
+      capacity,
+      description,
+      benefits,
+      terms,
+    };
+    for (const [field, value] of Object.entries(requiredFields)) {
+      if (!value) {
+        // Hapus file jika validasi gagal
+        if (req.file) fs.unlinkSync(req.file.path);
+        return res
+          .status(400)
+          .json({ message: `Field '${field}' wajib diisi.` });
+      }
+    }
+
+    try {
+      // 1. Ambil data mentor untuk mendapatkan id_campus
+      const mentorData = await prisma.mentor.findUnique({
+        where: { id: idMentor },
+        select: { id_campus: true },
+      });
+
+      if (!mentorData) {
+        if (req.file) fs.unlinkSync(req.file.path);
+        return res
+          .status(404)
+          .json({ message: "Data mentor tidak ditemukan." });
+      }
+
+      const idCampus = mentorData.id_campus;
+
+      // 2. Konversi majorName (yang sebenarnya adalah majorId) ke integer
+      const majorId = parseInt(majorName, 10);
+      if (isNaN(majorId)) {
+        if (req.file) fs.unlinkSync(req.file.path);
+        return res
+          .status(400)
+          .json({ message: "Format ID Jurusan tidak valid." });
+      }
+
+      // 3. Cari Major berdasarkan ID-nya dan pastikan milik kampus mentor
+      const major = await prisma.major.findFirst({
+        where: {
+          id: majorId,
+          id_campus: idCampus,
+        },
+        select: {
+          id: true,
+        },
+      });
+      if (!major) {
+        if (req.file) fs.unlinkSync(req.file.path);
+        return res.status(404).json({
+          message: `Jurusan dengan ID '${majorId}' tidak ditemukan atau bukan milik kampus Anda.`,
+        });
+      }
+
+      // 4. Konversi tipe data & Helper parsing
+      const parseJsonOrWrapInArray = (value) => {
+        if (typeof value === "string") {
+          try {
+            return JSON.parse(value);
+          } catch (e) {
+            return value
+              .split(",")
+              .map((item) => item.trim())
+              .filter((item) => item);
+          }
+        }
+        return [];
+      };
+
+      const parsedCapacity = parseInt(capacity, 10);
+      if (isNaN(parsedCapacity)) {
+        if (req.file) fs.unlinkSync(req.file.path);
+        return res
+          .status(400)
+          .json({ message: "Kapasitas harus berupa angka." });
+      }
+
+      let parsedLat = null;
+      let parsedLng = null;
+
+      // 5. Siapkan data untuk disimpan
+      const programData = {
+        program_name: name,
+        description: description,
+        start_program_date: new Date(startDateProgram),
+        end_program_date: new Date(endDateProgram),
+        start_regis_date: new Date(startRegisDate),
+        end_regis_date: new Date(endRegisDate),
+        capacity: parsedCapacity,
+        // program_status: "open",
+        id_campus: idCampus,
+        id_major: major.id,
+        path_gambar: req.file.path.replace(/\\/g, "/"),
+        benefit: parseJsonOrWrapInArray(benefits),
+        terms_and_conditions: parseJsonOrWrapInArray(terms),
+        type_sesi: programType,
+        sesi_start: new Date(`1970-01-01T${startTime}:00`),
+        sesi_end: new Date(`1970-01-01T${endTime}:00`),
+        visibility: visibility,
+        create_at: new Date(),
+        update_at: new Date(),
+      };
+
+      // Tambahkan data lokasi jika program 'onsite'
+      if (programType === "onsite") {
+        parsedLat = parseFloat(mapLat);
+        parsedLng = parseFloat(mapLng);
+
+        if (!location_name || isNaN(parsedLat) || isNaN(parsedLng)) {
+          if (req.file) fs.unlinkSync(req.file.path);
+          return res.status(400).json({
+            message:
+              "Untuk program onsite, nama lokasi, latitude, dan longitude wajib diisi dengan benar.",
+          });
+        }
+
+        programData.onsiteLocationName = location_name;
+        programData.lat = parsedLat;
+        programData.lng = parsedLng;
+      }
+
+      // 6. Buat program baru di database DAN assign mentor ke program tersebut
+      const newProgram = await prisma.$transaction(async (tx) => {
+        // Create Program
+        const createdProgram = await tx.program.create({
+          data: programData,
+        });
+
+        // Assign Mentor to Program
+        await tx.program_mentor.create({
+          data: {
+            id_mentor: idMentor,
+            id_program: createdProgram.id,
+          },
+        });
+
+        return createdProgram;
+      });
+
+      return res.status(201).json({
+        message: "Program berhasil dibuat.",
+        data: newProgram,
+      });
+    } catch (error) {
+      // Hapus file yang sudah diupload jika terjadi error
+      if (req.file) {
+        fs.unlink(req.file.path, (err) => {
+          if (err) console.error("Gagal menghapus file setelah error:", err);
+        });
+      }
+
+      console.error("Gagal membuat program:", error);
+      if (error instanceof SyntaxError) {
+        return res.status(400).json({
+          message: "Format JSON pada 'benefits' atau 'terms' tidak valid.",
+        });
+      }
+      return res.status(500).json({
+        message: "Terjadi kesalahan server saat membuat program.",
+        error: error.message,
+      });
+    }
+  }
+);
+
 // edit program by id for mentor
 router.put(
   "/edit-program/:id",
@@ -631,11 +847,95 @@ router.get(
       });
     } catch (error) {
       console.error(error);
-      return res
-        .status(500)
-        .json({
-          message: "Terjadi kesalahan server saat mengambil data jurusan.",
+      return res.status(500).json({
+        message: "Terjadi kesalahan server saat mengambil data jurusan.",
+      });
+    }
+  }
+);
+
+// delete program by id for mentor
+router.delete(
+  "/delete-program/:id",
+  authenticateUser,
+  authorizeRoles(["mentor"]),
+  async (req, res) => {
+    const idMentor = req.user.id;
+    const { id } = req.params;
+    const idProgram = parseInt(id);
+
+    // Validasi ID program
+    if (isNaN(idProgram)) {
+      return res.status(400).json({
+        message: "ID Program tidak valid. Harus berupa angka.",
+      });
+    }
+
+    try {
+      // 1. Cari program untuk verifikasi kepemilikan dan mendapatkan path gambar
+      const programToDelete = await prisma.program.findFirst({
+        where: {
+          id: idProgram,
+          program_mentor: {
+            some: {
+              id_mentor: idMentor,
+            },
+          },
+        },
+        select: {
+          path_gambar: true,
+        },
+      });
+
+      // Jika program tidak ditemukan atau bukan milik kampus ini
+      if (!programToDelete) {
+        return res.status(404).json({
+          message:
+            "Program tidak ditemukan atau Anda tidak berhak menghapusnya.",
         });
+      }
+
+      // 2. Hapus file gambar jika ada
+      if (programToDelete.path_gambar) {
+        // process.cwd() akan mengarah ke root proyek: /home/apipi/Pbl Sem-5/TEMPA-BE
+        const imagePath = path.join(process.cwd(), programToDelete.path_gambar);
+
+        // Cek apakah file ada sebelum mencoba menghapus
+        if (fs.existsSync(imagePath)) {
+          fs.unlink(imagePath, (err) => {
+            if (err) {
+              // Log error jika gagal menghapus file, tapi lanjutkan proses
+              console.error(`Gagal menghapus file gambar: ${imagePath}`, err);
+            } else {
+              console.log(`File gambar berhasil dihapus: ${imagePath}`);
+            }
+          });
+        }
+      }
+
+      // 3. Hapus relasi program_mentor terlebih dahulu (karena constraint NoAction)
+      await prisma.program_mentor.deleteMany({
+        where: {
+          id_program: idProgram,
+        },
+      });
+
+      // 4. Hapus program dari database
+      await prisma.program.delete({
+        where: {
+          id: idProgram,
+        },
+      });
+
+      return res.status(200).json({
+        message: `Program dengan ID ${idProgram} berhasil dihapus.`,
+      });
+    } catch (error) {
+      console.error("Gagal menghapus program:", error);
+      return res.status(500).json({
+        message: "Terjadi kesalahan server saat menghapus program.",
+        error: error.message,
+      });
     }
   }
 );
