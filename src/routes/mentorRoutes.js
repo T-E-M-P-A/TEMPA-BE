@@ -196,6 +196,179 @@ router.get(
   }
 );
 
+// get detail program by id for mentor
+router.get(
+  "/get-detail-program/:id",
+  authenticateUser,
+  authorizeRoles(["mentor"]),
+  async (req, res) => {
+    const idMentor = req.user.id;
+    const idProgram = req.params.id;
+    const parsedIdProgram = parseInt(idProgram);
+
+    // Validasi ID Program
+    if (isNaN(parsedIdProgram)) {
+      return res.status(400).json({
+        message: "ID Program tidak valid. Harus berupa angka.",
+      });
+    }
+
+    try {
+      const detailProgram = await prisma.program.findFirst({
+        where: {
+          id: parsedIdProgram,
+          program_mentor: {
+            some: {
+              id_mentor: idMentor,
+            },
+          },
+        },
+        include: {
+          program_mentor: {
+            where: {
+              id_program: parsedIdProgram,
+            },
+            include: {
+              mentor: {
+                select: {
+                  id: true,
+                  name: true,
+                  nik: true,
+                  mentor_type: true,
+                },
+              },
+            },
+          },
+          campus_program_id_majorTocampus: {
+            include: {
+              standard_major: {
+                select: {
+                  id: true,
+                  major_name: true,
+                },
+              },
+            },
+          },
+          // ✅ TAMBAHKAN MATERI PROGRAM
+          materi: {
+            select: {
+              id: true,
+              title: true,
+              description: true,
+              visibility: true,
+              // Anda bisa tambahkan materi_resource jika perlu detail file
+              materi_resource: {
+                select: {
+                  type: true,
+                  path_file: true,
+                },
+              },
+            },
+          },
+          // ✅ TAMBAHKAN PROGRESS MENTEE (PESERTA)
+          mentee_progress: {
+            select: {
+              completion_status: true,
+              final_score: true,
+              mentee: {
+                // Relasi ke detail mentee
+                select: {
+                  username: true,
+                  email: true,
+                  gender: true,
+                },
+              },
+            },
+          },
+          // ✅ TAMBAHKAN COUNT UNTUK TOTAL PESERTA TERDAFTAR
+          _count: {
+            select: {
+              mentee_progress: true,
+            },
+          },
+        },
+      });
+
+      if (!detailProgram) {
+        return res.status(404).json({
+          message:
+            "Program tidak ditemukan atau Anda tidak terdaftar sebagai mentor di program ini.",
+        });
+      }
+
+      const item = detailProgram;
+
+      // FORMAT PATH GAMBAR PROGRAM UTAMA
+      const imageUrl = formatPathToUrl(item.path_gambar, BASE_URL);
+      const formattedMateriList = item.materi.map((materi) => ({
+        ...materi,
+        // Lakukan mapping pada materi_resource
+        materi_resource: materi.materi_resource.map((resource) => {
+          const newItem = {
+            ...resource,
+            resource_url:
+              resource.type === "kuis" || resource.type === "video"
+                ? resource.path_file
+                : formatPathToUrl(resource.path_file, BASE_URL),
+          };
+          delete newItem.path_file;
+          return newItem;
+        }),
+      }));
+
+      // BUAT OBJEK HASIL AKHIR
+      const formattedDetail = {
+        ...item,
+        image_url: imageUrl,
+        major_name:
+          item.campus_program_id_majorTocampus?.standard_major?.major_name ||
+          null,
+        registered_mentees: item._count?.mentee_progress || 0,
+        // ✅ MAP dan bersihkan list mentee agar lebih mudah diakses di frontend
+        mentee_list: item.mentee_progress.map((mp) => ({
+          username: mp.mentee?.username,
+          email: mp.mentee?.email,
+          gender: mp.mentee?.gender,
+          completion_status: mp.completion_status,
+          final_score: mp.final_score,
+        })),
+        // ✅ Gunakan data materi yang sudah diformat
+        materi_list: formattedMateriList,
+        mentor_list: item.program_mentor.map((pm) => ({
+          id: pm.id,
+          mentor_id: pm.mentor?.id,
+          name: pm.mentor?.name,
+          nik: pm.mentor?.nik,
+          mentor_type: pm.mentor?.mentor_type,
+        })),
+      };
+
+      // Bersihkan properti yang tidak diperlukan lagi (opsional)
+      delete formattedDetail.path_gambar;
+      delete formattedDetail.program_mentor;
+      delete formattedDetail.id_campus;
+      delete formattedDetail.id_mentor;
+      delete formattedDetail.id_session_type;
+      delete formattedDetail.campus_program_id_majorTocampus;
+      delete formattedDetail._count;
+      // Hapus mentee_progress mentah yang sudah dipetakan
+      delete formattedDetail.mentee_progress;
+      delete formattedDetail.materi; // Hapus materi mentah
+
+      return res.status(200).json({
+        message: "Detail program berhasil ditemukan.",
+        data: formattedDetail,
+      });
+    } catch (error) {
+      console.error("Error fetching detail program:", error);
+      return res.status(500).json({
+        message: "Terjadi kesalahan server saat mengambil detail program.",
+        error: error.message,
+      });
+    }
+  }
+);
+
 // test midleware
 router.post(
   "/testing-midleware",
