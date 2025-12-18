@@ -1,5 +1,16 @@
 .env
-uploads/
+
+uploads/program_materi/*
+uploads/program_images/*
+uploads/campus_images/banner/*
+uploads/campus_images/logo/*
+
+!uploads/program_materi/.gitkeep
+!uploads/program_images/.gitkeep
+!uploads/campus_images/banner/.gitkeep
+!uploads/campus_images/logo/.gitkeep
+
+
 # Perbaiki nama folder virtual environment
 venv_pddikti/ 
 
