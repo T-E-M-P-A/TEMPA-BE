@@ -16,3 +16,5 @@ venv_pddikti/
 
 # Tambahan yang direkomendasikan untuk proyek Node.js/Express:
 node_modules/
+
+package-lock.json
