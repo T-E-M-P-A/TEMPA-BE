@@ -4,9 +4,11 @@ import bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
 import authenticateUser from "../middlewares/auth.js";
 import authorizeRoles from "../middlewares/roles.js";
+import formatPathToUrl from "../controllers/formatPathUrl.js";
 
 const router = express.Router();
 const JWT_SECRET = process.env.JWT_SECRET;
+const BASE_URL = process.env.API_BASE_URL;
 
 // login admin
 router.post("/admin-login", async (req, res) => {
@@ -123,6 +125,46 @@ router.get(
       console.error(error);
       return res.status(500).json({
         message: "Terjadi kesalahan saat mengambil data dashboard",
+        error: error.message,
+      });
+    }
+  }
+);
+
+// get all campus data for admin
+router.get(
+  "/get-all-campus",
+  authenticateUser,
+  authorizeRoles(["admin"]),
+  async (req, res) => {
+    try {
+      const allCampus = await prisma.campus.findMany({
+        select: {
+          id: true,
+          campus_name: true,
+          path_logo: true,
+          verification_status: true,
+        },
+        orderBy: {
+          campus_name: "asc",
+        },
+      });
+
+      const formattedCampus = allCampus.map((campus) => ({
+        id: campus.id,
+        campus_name: campus.campus_name,
+        verification_status: campus.verification_status,
+        logo_url: formatPathToUrl(campus.path_logo, BASE_URL),
+      }));
+
+      return res.status(200).json({
+        message: "Data kampus berhasil diambil",
+        data: formattedCampus,
+      });
+    } catch (error) {
+      console.error("Gagal mengambil data kampus:", error);
+      return res.status(500).json({
+        message: "Terjadi kesalahan server saat mengambil data kampus",
         error: error.message,
       });
     }
