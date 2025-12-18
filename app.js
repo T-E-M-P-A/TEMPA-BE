@@ -25,7 +25,7 @@ app.use("/public", express.static(path.join(process.cwd(), "uploads"))); // <-- 
 app.use("/api/v1", menteeRoutes);
 
 // admin route
-app.use("/api/v1", adminRoutes);
+app.use("/api/v1/admin", adminRoutes);
 
 // campus route
 app.use("/api/v1", campusRoutes);

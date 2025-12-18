@@ -30,7 +30,7 @@ router.post("/admin-login", async (req, res) => {
     // if username not found
     if (!admin) {
       return res.status(401).json({
-        message: "Username not found!",
+        message: "Username tidak ditemukan!",
       });
     }
 
@@ -40,7 +40,7 @@ router.post("/admin-login", async (req, res) => {
     // if password worng
     if (!isPasswordValid) {
       return res.status(401).json({
-        message: "Password Wrong!",
+        message: "Kata sandi salah!",
       });
     }
 
@@ -56,7 +56,7 @@ router.post("/admin-login", async (req, res) => {
     );
 
     return res.status(200).json({
-      message: "Login admin success",
+      message: "Login admin berhasil",
       token: token,
       adminId: admin.id,
     });
@@ -67,6 +67,67 @@ router.post("/admin-login", async (req, res) => {
     });
   }
 });
+
+// get dashboard data for admin (total campus, program, mentee, and chart data)
+router.get(
+  "/get-dashboard-data",
+  authenticateUser,
+  authorizeRoles(["admin"]),
+  async (req, res) => {
+    try {
+      // Menggunakan Promise.all untuk efisiensi query paralel
+      const [totalCampus, totalProgram, totalMentee, campusPrograms] =
+        await Promise.all([
+          // 1. Total Campus Accepted
+          prisma.campus.count({
+            where: {
+              verification_status: "accepted",
+            },
+          }),
+          // 2. Total Program
+          prisma.program.count(),
+          // 3. Total Mentee
+          prisma.mentee.count(),
+          // 4. Data Kampus untuk Chart (Jumlah Program per Kampus)
+          prisma.campus.findMany({
+            where: {
+              verification_status: "accepted",
+            },
+            select: {
+              campus_name: true,
+              _count: {
+                select: {
+                  program_program_id_campusTocampus: true, // Relasi ke tabel program
+                },
+              },
+            },
+          }),
+        ]);
+
+      // Format data untuk chart
+      const chartData = campusPrograms.map((item) => ({
+        campus_name: item.campus_name,
+        total_program: item._count.program_program_id_campusTocampus,
+      }));
+
+      return res.status(200).json({
+        message: "Data dashboard berhasil diambil",
+        data: {
+          total_campus_accepted: totalCampus,
+          total_program: totalProgram,
+          total_mentee: totalMentee,
+          program_per_campus: chartData,
+        },
+      });
+    } catch (error) {
+      console.error(error);
+      return res.status(500).json({
+        message: "Terjadi kesalahan saat mengambil data dashboard",
+        error: error.message,
+      });
+    }
+  }
+);
 
 // test midleware
 router.post(
