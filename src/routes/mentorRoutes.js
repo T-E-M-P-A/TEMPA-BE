@@ -887,6 +887,39 @@ router.put(
   }
 );
 
+// get major for form major
+router.get(
+  "/all-majors-form",
+  authenticateUser,
+  authorizeRoles(["mentor"]),
+  async (req, res) => {
+    try {
+      const allMajors = await prisma.standard_major.findMany({
+        select: {
+          id: true,
+          major_name: true,
+        },
+      });
+
+      if (!allMajors) {
+        return res.status(404).json({ message: "Data Jurusan tidak ada." });
+      }
+
+      console.log(allMajors);
+
+      return res.status(200).json({
+        message: "Data Jurusan ditemukan",
+        data: allMajors,
+      });
+    } catch (error) {
+      console.log(error);
+      return res
+        .status(500)
+        .json({ message: "Not Found due to internal error." });
+    }
+  }
+);
+
 // get major campus
 router.get(
   "/all-majors",
@@ -933,6 +966,111 @@ router.get(
       console.error(error);
       return res.status(500).json({
         message: "Terjadi kesalahan server saat mengambil data jurusan.",
+      });
+    }
+  }
+);
+
+// add majors to campus for mentor
+router.post(
+  "/add-majors-campus",
+  authenticateUser,
+  authorizeRoles(["mentor"]),
+  async (req, res) => {
+    const idMentor = req.user.id;
+    const newMajorsFromRequest = req.body;
+
+    // 1. Validasi input
+    if (!Array.isArray(newMajorsFromRequest)) {
+      return res.status(400).json({
+        message:
+          "Input tidak valid. Diperlukan sebuah array berisi objek jurusan (major).",
+      });
+    }
+
+    try {
+      // 2. Ambil data mentor untuk mendapatkan id_campus
+      const mentorData = await prisma.mentor.findUnique({
+        where: { id: idMentor },
+        select: { id_campus: true, mentor_type: true },
+      });
+
+      if (!mentorData) {
+        return res
+          .status(404)
+          .json({ message: "Data mentor tidak ditemukan." });
+      }
+
+      if (mentorData.mentor_type !== "super_mentor") {
+        return res.status(403).json({
+          message:
+            "Anda tidak memiliki izin untuk mengedit data jurusan kampus!",
+        });
+      }
+
+      const idCampus = mentorData.id_campus;
+
+      // Ekstrak ID jurusan standar dari request dan pastikan unik
+      const newStandardMajorIds = new Set(
+        newMajorsFromRequest
+          .map((major) => major.id)
+          .filter((id) => typeof id === "number")
+      );
+
+      // Ambil semua jurusan yang saat ini terdaftar untuk kampus ini
+      const existingMajors = await prisma.major.findMany({
+        where: { id_campus: idCampus },
+        select: { id_standard_major: true },
+      });
+      const existingStandardMajorIds = new Set(
+        existingMajors.map((major) => major.id_standard_major)
+      );
+
+      // Tentukan jurusan mana yang akan ditambahkan dan dihapus
+      const idsToAdd = [...newStandardMajorIds].filter(
+        (id) => !existingStandardMajorIds.has(id)
+      );
+      const idsToRemove = [...existingStandardMajorIds].filter(
+        (id) => !newStandardMajorIds.has(id)
+      );
+
+      // Gunakan transaksi untuk memastikan semua operasi berhasil atau tidak sama sekali
+      const transactionResult = await prisma.$transaction(async (tx) => {
+        // Hapus jurusan yang tidak lagi ada di daftar
+        if (idsToRemove.length > 0) {
+          await tx.major.deleteMany({
+            where: {
+              id_campus: idCampus,
+              id_standard_major: { in: idsToRemove },
+            },
+          });
+        }
+
+        // Tambahkan jurusan baru
+        if (idsToAdd.length > 0) {
+          await tx.major.createMany({
+            data: idsToAdd.map((id) => ({
+              id_campus: idCampus,
+              id_standard_major: id,
+            })),
+          });
+        }
+
+        return { added: idsToAdd.length, removed: idsToRemove.length };
+      });
+
+      return res.status(200).json({
+        message: `Sinkronisasi jurusan berhasil. Ditambahkan: ${transactionResult.added}, Dihapus: ${transactionResult.removed}.`,
+        data: {
+          id_campus: idCampus,
+          synced_majors: [...newStandardMajorIds],
+        },
+      });
+    } catch (error) {
+      console.error("Gagal menambahkan jurusan ke kampus:", error);
+      return res.status(500).json({
+        message: "Terjadi kesalahan server saat menambahkan jurusan.",
+        error: error.message,
       });
     }
   }
