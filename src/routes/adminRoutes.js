@@ -171,6 +171,61 @@ router.get(
   }
 );
 
+// get detail campus by id for admin
+router.get(
+  "/get-detail-verification-campus/:id",
+  authenticateUser,
+  authorizeRoles(["admin"]),
+  async (req, res) => {
+    const { id } = req.params;
+    const idCampus = parseInt(id);
+
+    if (isNaN(idCampus)) {
+      return res.status(400).json({
+        message: "ID Kampus tidak valid. Harus berupa angka.",
+      });
+    }
+
+    try {
+      const campus = await prisma.campus.findUnique({
+        where: {
+          id: idCampus,
+        },
+        select: {
+          id: true,
+          campus_name: true,
+          email_campus: true,
+          description: true,
+          website_campus: true,
+          province: true,
+          city: true,
+          subdistrict: true,
+          ward: true,
+          lat: true,
+          lng: true,
+        },
+      });
+
+      if (!campus) {
+        return res.status(404).json({
+          message: "Data kampus tidak ditemukan.",
+        });
+      }
+
+      return res.status(200).json({
+        message: "Detail kampus berhasil diambil",
+        data: campus,
+      });
+    } catch (error) {
+      console.error("Gagal mengambil detail kampus:", error);
+      return res.status(500).json({
+        message: "Terjadi kesalahan server saat mengambil detail kampus",
+        error: error.message,
+      });
+    }
+  }
+);
+
 // test midleware
 router.post(
   "/testing-midleware",
