@@ -5,6 +5,8 @@ import jwt from "jsonwebtoken";
 import authenticateUser from "../middlewares/auth.js";
 import authorizeRoles from "../middlewares/roles.js";
 import formatPathToUrl from "../controllers/formatPathUrl.js";
+import nodemailer from "nodemailer";
+import path from "path";
 
 const router = express.Router();
 const JWT_SECRET = process.env.JWT_SECRET;
@@ -271,6 +273,108 @@ router.put(
       console.error("Gagal mengubah status kampus:", error);
       return res.status(500).json({
         message: "Terjadi kesalahan server saat mengubah status kampus",
+        error: error.message,
+      });
+    }
+  }
+);
+
+// reject campus and send email notification
+router.put(
+  "/reject-campus/:id",
+  authenticateUser,
+  authorizeRoles(["admin"]),
+  async (req, res) => {
+    const { id } = req.params;
+    const { reason } = req.body;
+    const idCampus = parseInt(id);
+
+    if (isNaN(idCampus)) {
+      return res.status(400).json({
+        message: "ID Kampus tidak valid. Harus berupa angka.",
+      });
+    }
+
+    if (!reason) {
+      return res.status(400).json({
+        message: "Alasan penolakan wajib diisi.",
+      });
+    }
+
+    try {
+      // Cek keberadaan kampus
+      const existingCampus = await prisma.campus.findUnique({
+        where: { id: idCampus },
+      });
+
+      if (!existingCampus) {
+        return res.status(404).json({
+          message: "Data kampus tidak ditemukan.",
+        });
+      }
+
+      // Update status menjadi rejected
+      const updatedCampus = await prisma.campus.update({
+        where: { id: idCampus },
+        data: { verification_status: "rejected" },
+      });
+
+      // Konfigurasi Nodemailer
+      const transporter = nodemailer.createTransport({
+        service: "gmail", // Sesuaikan dengan provider email Anda (misal: gmail)
+        auth: {
+          user: process.env.EMAIL_USER, // Pastikan env ini diset
+          pass: process.env.EMAIL_PASS, // Pastikan env ini diset (App Password jika Gmail)
+        },
+      });
+
+      // Path ke logo lokal
+      const logoPath = path.join(process.cwd(), "assets", "logo-text.png");
+
+      // Kirim Email
+      await transporter.sendMail({
+        from: process.env.EMAIL_USER,
+        to: existingCampus.email, // Mengirim ke email akun kampus
+        subject: "Pemberitahuan Verifikasi Kampus - Ditolak",
+        html: `
+          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e0e0e0; border-radius: 8px; background-color: #ffffff;">
+            <div style="text-align: center; margin-bottom: 20px;">
+              <!-- Ganti src dengan URL logo publik aplikasi Anda -->
+              <img src="cid:logoTempa" alt="TEMPA Logo" style="max-width: 150px; height: auto;" />
+            </div>
+            <h2 style="color: #333; text-align: center;">Status Verifikasi Kampus</h2>
+            <p style="font-size: 16px; color: #555;">Halo <strong>${existingCampus.campus_name}</strong>,</p>
+            <p style="font-size: 16px; color: #555; line-height: 1.5;">
+              Terima kasih telah mendaftar di platform kami. Setelah melakukan peninjauan data, kami mohon maaf untuk menginformasikan bahwa pengajuan verifikasi akun kampus Anda <strong>DITOLAK</strong>.
+            </p>
+            <div style="background-color: #fff5f5; border-left: 5px solid #ff4d4f; padding: 15px; margin: 20px 0;">
+              <p style="margin: 0; font-weight: bold; color: #cf1322;">Alasan Penolakan:</p>
+              <p style="margin: 5px 0 0; color: #555;">${reason}</p>
+            </div>
+            <p style="font-size: 16px; color: #555; line-height: 1.5;">
+              Silakan perbaiki data Anda sesuai dengan alasan di atas dan ajukan kembali verifikasi melalui dashboard.
+            </p>
+            <br>
+            <p style="font-size: 16px; color: #555;">Salam hangat,<br><strong>Tim Admin TEMPA</strong></p>
+          </div>
+        `,
+        attachments: [
+          {
+            filename: "logo-text.png",
+            path: logoPath,
+            cid: "logoTempa", // Harus sama dengan cid di tag img src
+          },
+        ],
+      });
+
+      return res.status(200).json({
+        message: "Kampus berhasil ditolak dan email notifikasi terkirim.",
+        data: updatedCampus,
+      });
+    } catch (error) {
+      console.error("Gagal menolak kampus:", error);
+      return res.status(500).json({
+        message: "Terjadi kesalahan server saat menolak kampus.",
         error: error.message,
       });
     }
