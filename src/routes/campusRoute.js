@@ -351,6 +351,127 @@ router.post(
 );
 
 // =======================================================================
+// 2.1. EDIT DATA CAMPUS
+// =======================================================================
+router.put(
+  "/edit-data-campus",
+  authenticateUser,
+  authorizeRoles(["campus"]),
+  async (req, res) => {
+    const {
+      campusName,
+      emailCampus,
+      description,
+      websiteCampus,
+      province,
+      city,
+      subdistrict,
+      ward,
+      lat,
+      lng,
+    } = req.body;
+    const idCampus = req.user.id;
+
+    const requiredFields = [
+      "campusName",
+      "emailCampus",
+      "description",
+      "websiteCampus",
+      "province",
+      "city",
+      "subdistrict",
+      "ward",
+      "lat",
+      "lng",
+    ];
+
+    // check if req is null
+    for (const field of requiredFields) {
+      const value = req.body[field];
+
+      if (
+        value === undefined ||
+        value === null ||
+        (typeof value === "string" && value.trim() === "")
+      ) {
+        return res.status(400).json({
+          message: `Gagal: Kolom '${field}' wajib diisi dan tidak boleh kosong.`,
+        });
+      }
+    }
+
+    // check format email
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(emailCampus)) {
+      return res.status(400).json({
+        message: "Gagal: Format email tidak valid.",
+      });
+    }
+
+    try {
+      // convertion to float
+      const parsedLat = parseFloat(lat);
+      const parsedLng = parseFloat(lng);
+
+      // check if lat and lng value is float
+      if (isNaN(parsedLat) || isNaN(parsedLng)) {
+        return res.status(400).json({
+          message:
+            "Gagal: Latitude (lat) dan Longitude (lng) harus berupa angka yang valid.",
+        });
+      }
+
+      // Update data detail kampus
+      const updateDataCampus = await prisma.campus.update({
+        where: {
+          id: idCampus,
+        },
+        data: {
+          campus_name: campusName,
+          email_campus: emailCampus,
+          description: description,
+          website_campus: websiteCampus,
+          province: province,
+          city: city,
+          subdistrict: subdistrict,
+          ward: ward,
+          lat: parsedLat,
+          lng: parsedLng,
+          verification_status: "pending",
+        },
+      });
+
+      return res.status(200).json({
+        message: "Data kampus berhasil diperbarui",
+        data: updateDataCampus,
+      });
+    } catch (error) {
+      console.error("Prisma Error:", error);
+
+      // error unique email
+      if (error.code === "P2002") {
+        return res.status(409).json({
+          message: "Email kampus sudah terdaftar (pelanggaran unik).",
+        });
+      }
+      // error validation input
+      if (error.name === "PrismaClientValidationError") {
+        return res.status(400).json({
+          message:
+            "Kesalahan validasi input data. Cek fields yang wajib diisi.",
+          details: error.message,
+        });
+      }
+
+      return res.status(500).json({
+        message: "Terjadi kesalahan server saat memperbarui data.",
+        error: error.message,
+      });
+    }
+  }
+);
+
+// =======================================================================
 // 3. CHECK VERIFICATION STATUS CAMPUS
 // =======================================================================
 router.get(
@@ -386,6 +507,56 @@ router.get(
       console.error("Error fetching verification status:", error);
       return res.status(500).json({
         message: "Terjadi kesalahan server.",
+        error: error.message,
+      });
+    }
+  }
+);
+
+// =======================================================================
+// 3.1. GET DETAIL VERIFICATION CAMPUS (For Edit Form)
+// =======================================================================
+router.get(
+  "/get-detail-verification-campus",
+  authenticateUser,
+  authorizeRoles(["campus"]),
+  async (req, res) => {
+    const idCampus = req.user.id;
+
+    try {
+      const campus = await prisma.campus.findUnique({
+        where: {
+          id: idCampus,
+        },
+        select: {
+          id: true,
+          campus_name: true,
+          email_campus: true,
+          description: true,
+          website_campus: true,
+          province: true,
+          city: true,
+          subdistrict: true,
+          ward: true,
+          lat: true,
+          lng: true,
+        },
+      });
+
+      if (!campus) {
+        return res.status(404).json({
+          message: "Data kampus tidak ditemukan.",
+        });
+      }
+
+      return res.status(200).json({
+        message: "Detail kampus berhasil diambil",
+        data: campus,
+      });
+    } catch (error) {
+      console.error("Gagal mengambil detail kampus:", error);
+      return res.status(500).json({
+        message: "Terjadi kesalahan server saat mengambil detail kampus",
         error: error.message,
       });
     }
