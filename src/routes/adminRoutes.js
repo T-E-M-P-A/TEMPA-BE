@@ -226,6 +226,57 @@ router.get(
   }
 );
 
+// update verification status campus to accepted
+router.put(
+  "/accept-campus/:id",
+  authenticateUser,
+  authorizeRoles(["admin"]),
+  async (req, res) => {
+    const { id } = req.params;
+    const idCampus = parseInt(id);
+
+    if (isNaN(idCampus)) {
+      return res.status(400).json({
+        message: "ID Kampus tidak valid. Harus berupa angka.",
+      });
+    }
+
+    try {
+      // Cek keberadaan kampus
+      const existingCampus = await prisma.campus.findUnique({
+        where: { id: idCampus },
+      });
+
+      if (!existingCampus) {
+        return res.status(404).json({
+          message: "Data kampus tidak ditemukan.",
+        });
+      }
+
+      // Update status menjadi accepted
+      const updatedCampus = await prisma.campus.update({
+        where: {
+          id: idCampus,
+        },
+        data: {
+          verification_status: "accepted",
+        },
+      });
+
+      return res.status(200).json({
+        message: "Status verifikasi kampus berhasil diubah menjadi accepted",
+        data: updatedCampus,
+      });
+    } catch (error) {
+      console.error("Gagal mengubah status kampus:", error);
+      return res.status(500).json({
+        message: "Terjadi kesalahan server saat mengubah status kampus",
+        error: error.message,
+      });
+    }
+  }
+);
+
 // test midleware
 router.post(
   "/testing-midleware",
