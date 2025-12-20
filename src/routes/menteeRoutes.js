@@ -211,6 +211,9 @@ router.get(
       const getAllProgram = await prisma.program.findMany({
         where: {
           visibility: "public",
+          campus_program_id_campusTocampus: {
+            verification_status: "accepted",
+          },
         },
         include: {
           campus_program_id_campusTocampus: {
@@ -385,6 +388,9 @@ router.get(
   async (req, res) => {
     try {
       const getAllCampus = await prisma.campus.findMany({
+        where: {
+          verification_status: "accepted",
+        },
         select: {
           id: true,
           campus_name: true,
@@ -463,6 +469,9 @@ router.get(
           password: false,
 
           program_program_id_campusTocampus: {
+            where: {
+              visibility: "public",
+            },
             select: {
               id: true,
               program_name: true,
@@ -470,8 +479,10 @@ router.get(
               description: true,
               capacity: true,
               type_sesi: true,
-              program_status: true,
+              start_regis_date: true,
+              end_regis_date: true,
               start_program_date: true,
+              end_program_date: true,
               onsiteLocationName: true,
               campus_program_id_majorTocampus: {
                 include: {
