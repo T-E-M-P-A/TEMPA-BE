@@ -173,6 +173,63 @@ router.get(
   }
 );
 
+// get all mentee data for admin
+router.get(
+  "/get-all-mentee",
+  authenticateUser,
+  authorizeRoles(["admin"]),
+  async (req, res) => {
+    try {
+      const allMentee = await prisma.mentee.findMany({
+        select: {
+          id: true,
+          username: true,
+          email: true,
+          status: true,
+          mentee_progress: {
+            select: {
+              completion_status: true,
+              completion_date: true,
+              program: {
+                select: {
+                  id: true,
+                  program_name: true,
+                },
+              },
+            },
+          },
+        },
+        orderBy: {
+          username: "asc",
+        },
+      });
+
+      const formattedMentee = allMentee.map((mentee) => ({
+        id: mentee.id,
+        username: mentee.username,
+        email: mentee.email,
+        status: mentee.status,
+        registered_programs: mentee.mentee_progress.map((mp) => ({
+          program_name: mp.program?.program_name,
+          completion_status: mp.completion_status,
+          completion_date: mp.completion_date,
+        })),
+      }));
+
+      return res.status(200).json({
+        message: "Data mentee berhasil diambil",
+        data: formattedMentee,
+      });
+    } catch (error) {
+      console.error("Gagal mengambil data mentee:", error);
+      return res.status(500).json({
+        message: "Terjadi kesalahan server saat mengambil data mentee",
+        error: error.message,
+      });
+    }
+  }
+);
+
 // get detail campus by id for admin
 router.get(
   "/get-detail-verification-campus/:id",
