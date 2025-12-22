@@ -685,6 +685,101 @@ router.get(
   }
 );
 
+// get detail program
+router.get(
+  "/detail-program/:id",
+  authenticateUser,
+  authorizeRoles(["admin"]),
+  async (req, res) => {
+    try {
+      const idProgram = req.params.id;
+
+      const detailProgram = await prisma.program.findUnique({
+        where: {
+          id: parseInt(idProgram),
+        },
+        include: {
+          campus_program_id_campusTocampus: {
+            select: {
+              id: true,
+              campus_name: true,
+              address: true,
+              email: true,
+              path_logo: true,
+              path_banner: true,
+            },
+          },
+          campus_program_id_majorTocampus: {
+            include: {
+              standard_major: {
+                select: {
+                  major_name: true,
+                },
+              },
+            },
+          },
+          sesi_program: {
+            select: {
+              type_sesi: true,
+              description: true,
+            },
+          },
+        },
+      });
+
+      if (!detailProgram) {
+        // Tangani kasus 404 jika program tidak ditemukan
+        return res.status(404).json({ message: "Program tidak ditemukan." });
+      }
+
+      const item = detailProgram;
+
+      // 1. FORMAT PATH GAMBAR PROGRAM UTAMA
+      // Gunakan fungsi helper untuk memformat path_gambar program
+      const imageUrl = formatPathToUrl(item.path_gambar, BASE_URL);
+
+      // 2. FORMAT PATH GAMBAR KAMPUS
+      const campusData = item.campus_program_id_campusTocampus;
+
+      // Format path_logo
+      const logoUrl = formatPathToUrl(campusData.path_logo, BASE_URL);
+
+      // Format path_banner
+      const bannerUrl = formatPathToUrl(campusData.path_banner, BASE_URL);
+
+      // 3. BUAT OBJEK HASIL AKHIR (formatGetDetailProgram)
+      const formatGetDetailProgram = { ...item };
+
+      // a. Hapus path_gambar lama dan tambahkan image_url baru ke level atas
+      delete formatGetDetailProgram.path_gambar;
+      formatGetDetailProgram.image_url = imageUrl;
+
+      // b. Hapus path_logo dan path_banner lama dan tambahkan URL baru ke properti kampus
+      delete formatGetDetailProgram.campus_program_id_campusTocampus.path_logo;
+      delete formatGetDetailProgram.campus_program_id_campusTocampus
+        .path_banner;
+
+      // Tambahkan URL yang sudah diformat
+      formatGetDetailProgram.campus_program_id_campusTocampus.logo_url =
+        logoUrl;
+      formatGetDetailProgram.campus_program_id_campusTocampus.banner_url =
+        bannerUrl;
+
+      console.log(formatGetDetailProgram);
+
+      return res.status(200).json({
+        message: "Detail program ditemukan",
+        data: formatGetDetailProgram,
+      });
+    } catch (error) {
+      console.log(error);
+      return res
+        .status(404)
+        .json({ message: "Not Found due to internal error." });
+    }
+  }
+);
+
 // get majors
 router.get(
   "/all-majors",
