@@ -11,6 +11,7 @@ import path from "path";
 const router = express.Router();
 const JWT_SECRET = process.env.JWT_SECRET;
 const BASE_URL = process.env.API_BASE_URL;
+const FE_URL = process.env.FE_BASE_URL;
 
 // login admin
 router.post("/admin-login", async (req, res) => {
@@ -525,6 +526,11 @@ router.put(
             <p style="font-size: 16px; color: #555; line-height: 1.5;">
               Silakan perbaiki data Anda sesuai dengan alasan di atas dan ajukan kembali verifikasi melalui dashboard.
             </p>
+            <div style="text-align: center; margin: 30px 0;">
+              <a href="${FE_URL}/campus-verification/edit-form-data" style="background-color: #013B35; color: #ffffff; padding: 12px 24px; text-decoration: none; border-radius: 6px; font-weight: bold; display: inline-block;">
+                Perbaiki Data
+              </a>
+            </div>
             <br>
             <p style="font-size: 16px; color: #555;">Salam hangat,<br><strong>Tim Admin TEMPA</strong></p>
           </div>

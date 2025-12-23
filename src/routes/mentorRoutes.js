@@ -237,31 +237,71 @@ router.get(
   authorizeRoles(["mentor"]),
   async (req, res) => {
     const idMentor = req.user.id;
-
+    const typeMentor = req.user.mentorType;
+    // console.log(typeMentor);
     try {
-      const programMentor = await prisma.program_mentor.findMany({
-        where: {
-          id_mentor: idMentor,
-        },
-        include: {
-          program: {
-            include: {
-              campus_program_id_majorTocampus: {
-                include: {
-                  standard_major: {
-                    select: {
-                      major_name: true,
+      let rawPrograms = [];
+
+      if (typeMentor === "super_mentor") {
+        // 1. Ambil data mentor untuk mendapatkan id_campus
+        const mentorData = await prisma.mentor.findUnique({
+          where: { id: idMentor },
+          select: { id_campus: true },
+        });
+
+        if (!mentorData) {
+          return res
+            .status(404)
+            .json({ message: "Data mentor tidak ditemukan." });
+        }
+
+        // 2. Ambil semua program berdasarkan id_campus
+        rawPrograms = await prisma.program.findMany({
+          where: {
+            id_campus: mentorData.id_campus,
+          },
+          include: {
+            campus_program_id_majorTocampus: {
+              include: {
+                standard_major: {
+                  select: {
+                    major_name: true,
+                  },
+                },
+              },
+            },
+          },
+          orderBy: {
+            create_at: "desc",
+          },
+        });
+      } else {
+        const programMentor = await prisma.program_mentor.findMany({
+          where: {
+            id_mentor: idMentor,
+          },
+          include: {
+            program: {
+              include: {
+                campus_program_id_majorTocampus: {
+                  include: {
+                    standard_major: {
+                      select: {
+                        major_name: true,
+                      },
                     },
                   },
                 },
               },
             },
           },
-        },
-      });
+        });
 
-      const formattedPrograms = programMentor.map((pm) => {
-        const item = pm.program;
+        // Map agar strukturnya sama dengan rawPrograms (array of program objects)
+        rawPrograms = programMentor.map((pm) => pm.program);
+      }
+
+      const formattedPrograms = rawPrograms.map((item) => {
         const imageUrl = formatPathToUrl(item.path_gambar, BASE_URL);
 
         const majorName =
@@ -320,14 +360,21 @@ router.get(
     }
 
     try {
+      const mentorData = await prisma.mentor.findUnique({
+        where: { id: idMentor },
+        select: { id_campus: true },
+      });
+
+      if (!mentorData) {
+        return res
+          .status(404)
+          .json({ message: "Data mentor tidak ditemukan." });
+      }
+
       const detailProgram = await prisma.program.findFirst({
         where: {
           id: parsedIdProgram,
-          program_mentor: {
-            some: {
-              id_mentor: idMentor,
-            },
-          },
+          id_campus: mentorData.id_campus,
         },
         include: {
           program_mentor: {
@@ -749,13 +796,10 @@ router.put(
       const existingProgram = await prisma.program.findFirst({
         where: {
           id: idProgram,
-          program_mentor: {
-            some: {
-              id_mentor: idMentor,
-            },
-          },
+          id_campus: mentorData.id_campus,
         },
       });
+      console.log(existingProgram);
 
       if (!existingProgram) {
         return res.status(404).json({
@@ -1644,15 +1688,19 @@ router.delete(
     }
 
     try {
+      const getIdCampus = await prisma.mentor.findUnique({
+        where: {
+          id: idMentor,
+        },
+        select: {
+          id_campus: true,
+        },
+      });
       // 1. Cari program untuk verifikasi kepemilikan dan mendapatkan path gambar
       const programToDelete = await prisma.program.findFirst({
         where: {
           id: idProgram,
-          program_mentor: {
-            some: {
-              id_mentor: idMentor,
-            },
-          },
+          id_campus: getIdCampus.id_campus,
         },
         select: {
           path_gambar: true,

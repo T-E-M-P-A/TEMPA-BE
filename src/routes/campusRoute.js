@@ -1375,7 +1375,7 @@ router.put(
       mapLat,
       mapLng,
     } = req.body;
-
+    // console.log(req.body);
     try {
       // 1. Cari program yang akan di-edit untuk verifikasi dan mendapatkan path gambar lama
       const existingProgram = await prisma.program.findFirst({
@@ -1401,8 +1401,14 @@ router.put(
       }
 
       const major = await prisma.major.findFirst({
-        where: { id: majorId, id_campus: idCampus },
+        where: {
+          id_campus: parseInt(idCampus),
+          OR: [{ id: majorId }, { id_standard_major: majorId }],
+        },
       });
+
+      console.log(`id jurusan: ${majorId}, id campus: ${idCampus}`);
+      console.log(major);
 
       if (!major) {
         return res.status(404).json({
@@ -1527,6 +1533,8 @@ router.delete(
     const { id } = req.params;
     const idProgram = parseInt(id);
 
+    console.log(`ID Program: ${idProgram}, ID Campus: ${idCampus}`);
+
     // Validasi ID program
     if (isNaN(idProgram)) {
       return res.status(400).json({
@@ -1572,7 +1580,14 @@ router.delete(
         }
       }
 
-      // 3. Hapus program dari database
+      // 3. Hapus relasi program_mentor terlebih dahulu (karena constraint NoAction)
+      await prisma.program_mentor.deleteMany({
+        where: {
+          id_program: idProgram,
+        },
+      });
+
+      // 4. Hapus program dari database
       await prisma.program.delete({
         where: {
           id: idProgram,

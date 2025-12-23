@@ -1002,6 +1002,7 @@ router.get(
   async (req, res) => {
     // Pastikan idProgram adalah integer
     const idProgram = parseInt(req.params.id_program);
+    const idMentee = parseInt(req.user.id);
 
     // Cek apakah parsing berhasil
     if (isNaN(idProgram)) {
@@ -1011,6 +1012,15 @@ router.get(
     }
 
     try {
+      const getProgramStatus = await prisma.mentee_progress.findFirst({
+        where: {
+          id_mentee: idMentee,
+          id_program: idProgram,
+        },
+        select: {
+          completion_status: true,
+        },
+      });
       // 1. UPDATE Kueri Prisma: Sertakan relasi 'materi_resource'
       const materiList = await prisma.materi.findMany({
         where: {
@@ -1061,6 +1071,8 @@ router.get(
           // Kirim data yang dibutuhkan frontend untuk header
           data: [
             {
+              completion_status:
+                getProgramStatus?.completion_status || "on_going",
               program_name: programData.program_name,
               program_description: programData.description,
               end_program_date: programData.end_program_date,
@@ -1096,6 +1108,7 @@ router.get(
         // Gabungkan semua data yang dibutuhkan
         const newItem = {
           ...materiData,
+          completion_status: getProgramStatus?.completion_status || "on_going",
           program_name: program.program_name,
           program_description: program.description,
           end_program_date: program.end_program_date,
