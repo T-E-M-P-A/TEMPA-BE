@@ -65,6 +65,7 @@ router.post("/login-mentee", async (req, res) => {
         fullName: name,
         uniqueId: localUserId,
         email: email,
+        verify_status: userRecord.verify_status,
       },
     });
   } catch (error) {

@@ -13,9 +13,12 @@ model mentee {
   username             String                 @db.VarChar(255)
   email                String                 @unique @db.VarChar(225)
   password             String?                @db.Text
-  status               mentee_status?
-  address              String?                @db.VarChar(225)
+  verify_status        Boolean?               @default(false)
   gender               gender?
+  province             String?                @db.VarChar(225)
+  city                 String?                @db.VarChar(225)
+  subdistrict          String?                @db.VarChar(225)
+  ward                 String?                @db.VarChar(225)
   mentee_progress      mentee_progress[]
   program_feedback     program_feedback[]
   recomendation_majors recomendation_majors[]
@@ -223,11 +226,6 @@ enum visibility_materi {
 enum gender {
   Male
   Female
-}
-
-enum mentee_status {
-  Active
-  Non_Active @map("Non-Active")
 }
 
 enum mentee_progress_completion_status {
