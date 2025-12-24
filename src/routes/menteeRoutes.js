@@ -1450,6 +1450,62 @@ router.put(
   }
 );
 
+// save mentee major interest
+router.post(
+  "/mentee/save-major-interest",
+  authenticateUser,
+  authorizeRoles(["mentee"]),
+  async (req, res) => {
+    const menteeId = req.user.id;
+    const { selectedMajors } = req.body;
+
+    if (!selectedMajors || !Array.isArray(selectedMajors)) {
+      return res.status(400).json({
+        message:
+          "Format data tidak valid. 'selectedMajors' harus berupa array.",
+      });
+    }
+
+    try {
+      const majorIds = selectedMajors
+        .map((id) => parseInt(id))
+        .filter((id) => !isNaN(id));
+
+      await prisma.$transaction(async (tx) => {
+        // 1. Hapus data lama
+        await tx.mentee_major_interest.deleteMany({
+          where: {
+            id_mentee: menteeId,
+          },
+        });
+
+        // 2. Tambah data baru
+        if (majorIds.length > 0) {
+          const dataToInsert = majorIds.map((majorId) => ({
+            id_mentee: menteeId,
+            id_major: majorId,
+          }));
+
+          await tx.mentee_major_interest.createMany({
+            data: dataToInsert,
+          });
+        }
+      });
+
+      return res.status(200).json({
+        message: "Minat jurusan berhasil disimpan.",
+        data: majorIds,
+      });
+    } catch (error) {
+      console.error("Gagal menyimpan minat jurusan:", error);
+      return res.status(500).json({
+        message: "Terjadi kesalahan server saat menyimpan minat jurusan.",
+        error: error.message,
+      });
+    }
+  }
+);
+
 // test midleware
 router.post(
   "/testing-midleware-mentee",
