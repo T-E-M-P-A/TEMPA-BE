@@ -16,6 +16,7 @@ model mentee {
   education_status     mentee_education_status
   verify_status        Boolean?                @default(false)
   gender               gender?
+  date_of_birth        DateTime?               @db.Date
   province             String?                 @db.VarChar(225)
   city                 String?                 @db.VarChar(225)
   subdistrict          String?                 @db.VarChar(225)
