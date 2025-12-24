@@ -8,17 +8,18 @@ datasource db {
 }
 
 model mentee {
-  id                   Int                    @id @default(autoincrement())
-  sub_google_id        String                 @unique
-  username             String                 @db.VarChar(255)
-  email                String                 @unique @db.VarChar(225)
-  password             String?                @db.Text
-  verify_status        Boolean?               @default(false)
+  id                   Int                     @id @default(autoincrement())
+  sub_google_id        String                  @unique
+  username             String                  @db.VarChar(255)
+  email                String                  @unique @db.VarChar(225)
+  password             String?                 @db.Text
+  education_status     mentee_education_status
+  verify_status        Boolean?                @default(false)
   gender               gender?
-  province             String?                @db.VarChar(225)
-  city                 String?                @db.VarChar(225)
-  subdistrict          String?                @db.VarChar(225)
-  ward                 String?                @db.VarChar(225)
+  province             String?                 @db.VarChar(225)
+  city                 String?                 @db.VarChar(225)
+  subdistrict          String?                 @db.VarChar(225)
+  ward                 String?                 @db.VarChar(225)
   mentee_progress      mentee_progress[]
   program_feedback     program_feedback[]
   recomendation_majors recomendation_majors[]
@@ -265,4 +266,11 @@ enum program_visibility {
 enum mentor_mentor_type {
   super_mentor
   default
+}
+
+enum mentee_education_status {
+  Siswa_Aktif__SMA_SMK_Sederajat_        @map("Siswa Aktif (SMA/SMK/Sederajat)")
+  Lulusan_Baru___Gap_Year__Belum_Kuliah_ @map("Lulusan Baru / Gap Year (Belum Kuliah)")
+  Mahasiswa_Aktif                        @map("Mahasiswa Aktif")
+  Lainnya
 }
