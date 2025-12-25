@@ -1055,6 +1055,62 @@ router.put(
   }
 );
 
+// delete standard major
+router.delete(
+  "/delete-standard-major/:id",
+  authenticateUser,
+  authorizeRoles(["admin"]),
+  async (req, res) => {
+    const { id } = req.params;
+    const idMajor = parseInt(id);
+
+    if (isNaN(idMajor)) {
+      return res.status(400).json({
+        message: "ID Major tidak valid. Harus berupa angka.",
+      });
+    }
+
+    try {
+      const major = await prisma.standard_major.findUnique({
+        where: { id: idMajor },
+      });
+
+      if (!major) {
+        return res.status(404).json({
+          message: "Standard Major tidak ditemukan.",
+        });
+      }
+
+      // Hapus file banner jika ada
+      if (major.path_banner) {
+        const bannerPath = path.join(process.cwd(), major.path_banner);
+        if (fs.existsSync(bannerPath)) {
+          try {
+            fs.unlinkSync(bannerPath);
+          } catch (err) {
+            console.error(`Gagal menghapus banner: ${bannerPath}`, err);
+          }
+        }
+      }
+
+      // Hapus data dari database
+      await prisma.standard_major.delete({
+        where: { id: idMajor },
+      });
+
+      return res.status(200).json({
+        message: "Data standard major berhasil dihapus",
+      });
+    } catch (error) {
+      console.error("Gagal menghapus standard major:", error);
+      return res.status(500).json({
+        message: "Terjadi kesalahan server saat menghapus data",
+        error: error.message,
+      });
+    }
+  }
+);
+
 // test midleware
 router.post(
   "/testing-midleware",
