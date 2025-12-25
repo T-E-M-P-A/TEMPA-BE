@@ -676,11 +676,18 @@ router.get(
         return res.status(404).json({ message: "Data Jurusan tidak ada." });
       }
 
-      console.log(allMajors);
+      const formattedMajors = allMajors.map((major) => {
+        const bannerUrl = formatPathToUrl(major.path_banner, BASE_URL);
+        const newMajor = { ...major, banner_url: bannerUrl };
+        delete newMajor.path_banner;
+        return newMajor;
+      });
+
+      console.log(formattedMajors);
 
       return res.status(200).json({
         message: "Data Jurusan ditemukan",
-        data: allMajors,
+        data: formattedMajors,
       });
     } catch (error) {
       console.log(error);
@@ -718,7 +725,14 @@ router.get(
                 include: {
                   campus_program_id_majorTocampus: {
                     include: {
-                      standard_major: true,
+                      standard_major: {
+                        select: {
+                          id: true,
+                          major_name: true,
+                          logo_name: true,
+                          path_banner: true,
+                        },
+                      },
                       campus: {
                         select: {
                           campus_name: true,
@@ -744,6 +758,7 @@ router.get(
       // Format data untuk menyertakan URL gambar yang valid
       const formattedDetailMajor = {
         ...detailMajor,
+        banner_url: formatPathToUrl(detailMajor.path_banner, BASE_URL),
         campus: detailMajor.major.map((m) => {
           // Format Banner Kampus
           const campusBannerUrl = formatPathToUrl(
@@ -780,6 +795,8 @@ router.get(
           return newMajor;
         }),
       };
+
+      delete formattedDetailMajor.path_banner;
 
       return res.status(200).json({
         message: "Detail jurusan berhasil diambil",
