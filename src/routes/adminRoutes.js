@@ -7,11 +7,44 @@ import authorizeRoles from "../middlewares/roles.js";
 import formatPathToUrl from "../controllers/formatPathUrl.js";
 import nodemailer from "nodemailer";
 import path from "path";
+import multer from "multer";
+import fs from "fs";
 
 const router = express.Router();
 const JWT_SECRET = process.env.JWT_SECRET;
 const BASE_URL = process.env.API_BASE_URL;
 const FE_URL = process.env.FE_BASE_URL;
+
+// =======================================================================
+// MULTER CONFIG FOR MAJOR BANNER
+// =======================================================================
+const majorBannerStorage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    const dir = "uploads/majors_images/banner";
+    if (!fs.existsSync(dir)) {
+      fs.mkdirSync(dir, { recursive: true });
+    }
+    cb(null, dir);
+  },
+  filename: (req, file, cb) => {
+    const uniqueSuffix = Date.now() + "-" + Math.round(Math.random() * 1e9);
+    cb(null, "major-banner-" + uniqueSuffix + path.extname(file.originalname));
+  },
+});
+
+const uploadMajorBanner = multer({
+  storage: majorBannerStorage,
+  limits: { fileSize: 5 * 1024 * 1024 }, // 5 MB limit
+  fileFilter: (req, file, cb) => {
+    const fileTypes = /jpeg|jpg|png|gif/;
+    const extname = fileTypes.test(
+      path.extname(file.originalname).toLowerCase()
+    );
+    const mimetype = fileTypes.test(file.mimetype);
+    if (mimetype && extname) return cb(null, true);
+    cb(new Error("Hanya file gambar (jpeg, jpg, png, gif) yang diizinkan!"));
+  },
+});
 
 // login admin
 router.post("/admin-login", async (req, res) => {
@@ -902,6 +935,82 @@ router.get(
       return res.status(500).json({
         message:
           "Terjadi kesalahan server saat mengambil detail standard major",
+        error: error.message,
+      });
+    }
+  }
+);
+
+// update standard major
+router.put(
+  "/update-standard-major/:id",
+  authenticateUser,
+  authorizeRoles(["admin"]),
+  uploadMajorBanner.single("banner"),
+  async (req, res) => {
+    const { id } = req.params;
+    const idMajor = parseInt(id);
+    const { major_name, description, prospek_kerja } = req.body;
+
+    if (isNaN(idMajor)) {
+      return res.status(400).json({
+        message: "ID Major tidak valid. Harus berupa angka.",
+      });
+    }
+
+    try {
+      const existingMajor = await prisma.standard_major.findUnique({
+        where: { id: idMajor },
+      });
+
+      if (!existingMajor) {
+        if (req.file && fs.existsSync(req.file.path)) {
+          fs.unlinkSync(req.file.path);
+        }
+        return res.status(404).json({
+          message: "Standard Major tidak ditemukan.",
+        });
+      }
+
+      const dataToUpdate = {};
+      if (major_name) dataToUpdate.major_name = major_name;
+      if (description) dataToUpdate.description = description;
+
+      if (prospek_kerja) {
+        try {
+          dataToUpdate.prospek_kerja = JSON.parse(prospek_kerja);
+        } catch (e) {
+          dataToUpdate.prospek_kerja = prospek_kerja;
+        }
+      }
+
+      if (req.file) {
+        // Delete old banner if exists
+        if (existingMajor.path_banner) {
+          const oldPath = path.join(process.cwd(), existingMajor.path_banner);
+          if (fs.existsSync(oldPath)) {
+            fs.unlinkSync(oldPath);
+          }
+        }
+        dataToUpdate.path_banner = req.file.path.replace(/\\/g, "/");
+      }
+
+      const updatedMajor = await prisma.standard_major.update({
+        where: { id: idMajor },
+        data: dataToUpdate,
+      });
+
+      return res.status(200).json({
+        message: "Data standard major berhasil diperbarui",
+        data: updatedMajor,
+      });
+    } catch (error) {
+      if (req.file && fs.existsSync(req.file.path)) {
+        fs.unlinkSync(req.file.path);
+      }
+      console.error("Gagal update standard major:", error);
+      return res.status(500).json({
+        message: "Terjadi kesalahan server",
         error: error.message,
       });
     }
