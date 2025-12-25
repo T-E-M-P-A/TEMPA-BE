@@ -186,7 +186,8 @@ router.get(
           id: true,
           username: true,
           email: true,
-          status: true,
+          education_status: true,
+          gender: true,
           mentee_progress: {
             select: {
               completion_status: true,
@@ -810,6 +811,99 @@ router.get(
       return res
         .status(500)
         .json({ message: "Not Found due to internal error." });
+    }
+  }
+);
+
+// get standard majors name and logo
+router.get(
+  "/get-standard-majors",
+  authenticateUser,
+  authorizeRoles(["admin"]),
+  async (req, res) => {
+    try {
+      const majors = await prisma.standard_major.findMany({
+        select: {
+          id: true,
+          major_name: true,
+          path_logo: true,
+        },
+      });
+
+      console.log(majors);
+
+      if (!majors) {
+        return res.status(404).json({ message: "Data Jurusan tidak ada." });
+      }
+
+      const formattedMajors = majors.map((item) => ({
+        id: item.id,
+        major_name: item.major_name,
+        logo_url: formatPathToUrl(item.path_logo, BASE_URL),
+      }));
+
+      return res.status(200).json({
+        message: "Data standard major berhasil diambil",
+        data: formattedMajors,
+      });
+    } catch (error) {
+      console.error("Gagal mengambil data standard major:", error);
+      return res.status(500).json({
+        message: "Terjadi kesalahan server saat mengambil data standard major",
+        error: error.message,
+      });
+    }
+  }
+);
+
+// get detail standard major by id
+router.get(
+  "/detail-standard-major/:id",
+  authenticateUser,
+  authorizeRoles(["admin"]),
+  async (req, res) => {
+    const { id } = req.params;
+    const idMajor = parseInt(id);
+
+    if (isNaN(idMajor)) {
+      return res.status(400).json({
+        message: "ID Major tidak valid. Harus berupa angka.",
+      });
+    }
+
+    try {
+      const major = await prisma.standard_major.findUnique({
+        where: {
+          id: idMajor,
+        },
+      });
+
+      if (!major) {
+        return res.status(404).json({
+          message: "Data standard major tidak ditemukan.",
+        });
+      }
+
+      const formattedMajor = {
+        ...major,
+        logo_url: formatPathToUrl(major.path_logo, BASE_URL),
+        banner_url: formatPathToUrl(major.path_banner, BASE_URL),
+      };
+
+      delete formattedMajor.path_logo;
+      delete formattedMajor.path_banner;
+
+      return res.status(200).json({
+        message: "Detail standard major berhasil diambil",
+        data: formattedMajor,
+      });
+    } catch (error) {
+      console.error("Gagal mengambil detail standard major:", error);
+      return res.status(500).json({
+        message:
+          "Terjadi kesalahan server saat mengambil detail standard major",
+        error: error.message,
+      });
     }
   }
 );

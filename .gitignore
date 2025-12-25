@@ -2,10 +2,14 @@
 
 uploads/program_materi/*
 uploads/program_images/*
+uploads/majors_images/banner/*
+uploads/majors_images/logo/*
 uploads/campus_images/banner/*
 uploads/campus_images/logo/*
 
 !uploads/program_materi/.gitkeep
+!uploads/majors_images/banner/.gitkeep
+!uploads/majors_images/logo/.gitkeep
 !uploads/program_images/.gitkeep
 !uploads/campus_images/banner/.gitkeep
 !uploads/campus_images/logo/.gitkeep
