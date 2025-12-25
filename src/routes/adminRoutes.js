@@ -859,7 +859,7 @@ router.get(
         select: {
           id: true,
           major_name: true,
-          path_logo: true,
+          logo_name: true,
         },
       });
 
@@ -872,7 +872,7 @@ router.get(
       const formattedMajors = majors.map((item) => ({
         id: item.id,
         major_name: item.major_name,
-        logo_url: formatPathToUrl(item.path_logo, BASE_URL),
+        logo_url: item.logo_name,
       }));
 
       return res.status(200).json({
@@ -919,11 +919,9 @@ router.get(
 
       const formattedMajor = {
         ...major,
-        logo_url: formatPathToUrl(major.path_logo, BASE_URL),
         banner_url: formatPathToUrl(major.path_banner, BASE_URL),
       };
 
-      delete formattedMajor.path_logo;
       delete formattedMajor.path_banner;
 
       return res.status(200).json({
@@ -935,6 +933,46 @@ router.get(
       return res.status(500).json({
         message:
           "Terjadi kesalahan server saat mengambil detail standard major",
+        error: error.message,
+      });
+    }
+  }
+);
+
+// add standard major
+router.post(
+  "/add-standard-major",
+  authenticateUser,
+  authorizeRoles(["admin"]),
+  async (req, res) => {
+    const { major_name, logo_url } = req.body;
+
+    // console.log(req.body);
+
+    if (!major_name || !logo_url) {
+      return res.status(400).json({
+        message: "Nama jurusan dan nama ikon wajib diisi.",
+      });
+    }
+
+    try {
+      const newMajor = await prisma.standard_major.create({
+        data: {
+          major_name: major_name,
+          logo_name: logo_url,
+        },
+      });
+
+      console.log(newMajor);
+
+      return res.status(201).json({
+        message: "Data standard major berhasil ditambahkan",
+        data: newMajor,
+      });
+    } catch (error) {
+      console.error("Gagal menambahkan standard major:", error);
+      return res.status(500).json({
+        message: "Terjadi kesalahan server saat menambahkan data",
         error: error.message,
       });
     }

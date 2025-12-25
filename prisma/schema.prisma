@@ -75,7 +75,7 @@ model campus {
 model standard_major {
   id                    Int                     @id @default(autoincrement())
   major_name            String                  @db.VarChar(225)
-  path_logo             String?                 @db.Text
+  logo_name             String?                 @db.VarChar(225)
   path_banner           String?                 @db.Text
   description           String?                 @db.Text
   prospek_kerja         Json?
