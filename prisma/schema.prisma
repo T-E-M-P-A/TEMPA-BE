@@ -25,6 +25,7 @@ model mentee {
   mentee_progress       mentee_progress[]
   program_feedback      program_feedback[]
   recomendation_majors  recomendation_majors[]
+  view_log_program      view_log_program[]
 }
 
 model admin {
@@ -118,6 +119,7 @@ model program {
   visibility                       program_visibility?
   lat                              Float?              @db.Float
   lng                              Float?              @db.Float
+  seen                             Int?                @default(0)
   materi                           materi[]
   mentee_progress                  mentee_progress[]
   campus_program_id_campusTocampus campus              @relation("program_id_campusTocampus", fields: [id_campus], references: [id], onDelete: Cascade, map: "program_ibfk_2")
@@ -125,6 +127,7 @@ model program {
   program_feedback                 program_feedback[]
   program_mentor                   program_mentor[]
   sesi_program                     sesi_program[]
+  view_log_program                 view_log_program[]
 
   @@index([id_campus], map: "id_campus")
   @@index([id_major], map: "id_major")
@@ -233,6 +236,17 @@ model mentee_major_interest {
 
   @@index([id_major, id_mentee], map: "id_major")
   @@index([id_mentee], map: "id_mentee")
+}
+
+model view_log_program {
+  id         Int     @id @default(autoincrement())
+  id_program Int
+  id_mentee  Int
+  mentee     mentee  @relation(fields: [id_mentee], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "view_log_program_ibfk_1")
+  program    program @relation(fields: [id_program], references: [id], onDelete: Cascade, map: "view_log_program_ibfk_2")
+
+  @@index([id_mentee], map: "id_mentee")
+  @@index([id_program, id_mentee], map: "id_program")
 }
 
 enum visibility_materi {

@@ -772,6 +772,7 @@ router.get(
       const formattedDetail = {
         ...item,
         image_url: imageUrl,
+        seen: detailProgram.seen,
         major_name:
           item.campus_program_id_majorTocampus?.standard_major?.major_name ||
           null,

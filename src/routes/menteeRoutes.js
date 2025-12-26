@@ -335,6 +335,9 @@ router.get(
 
       const item = detailProgram;
 
+      const majorName =
+        item.campus_program_id_majorTocampus.standard_major.major_name;
+
       // 1. FORMAT PATH GAMBAR PROGRAM UTAMA
       // Gunakan fungsi helper untuk memformat path_gambar program
       const imageUrl = formatPathToUrl(item.path_gambar, BASE_URL);
@@ -350,6 +353,9 @@ router.get(
 
       // 3. BUAT OBJEK HASIL AKHIR (formatGetDetailProgram)
       const formatGetDetailProgram = { ...item };
+
+      formatGetDetailProgram.major_name = majorName;
+      delete formatGetDetailProgram.campus_program_id_majorTocampus;
 
       // a. Hapus path_gambar lama dan tambahkan image_url baru ke level atas
       delete formatGetDetailProgram.path_gambar;
@@ -1556,6 +1562,61 @@ router.get(
       console.error("Gagal mengambil minat jurusan:", error);
       return res.status(500).json({
         message: "Terjadi kesalahan server saat mengambil minat jurusan.",
+        error: error.message,
+      });
+    }
+  }
+);
+
+// add seen every mentee see detail program
+router.post(
+  "/mentee/add-seen-program/:idProgram",
+  authenticateUser,
+  authorizeRoles(["mentee"]),
+  async (req, res) => {
+    // console.log(req.user.id);
+
+    const menteeId = req.user.id;
+    const { idProgram } = req.params;
+    const idProgramInt = parseInt(idProgram);
+
+    if (isNaN(idProgramInt)) {
+      return res.status(400).json({ message: "ID Program tidak valid." });
+    }
+
+    try {
+      // check log in table view_log_program if mentee never seen the program
+      const existingLog = await prisma.view_log_program.findFirst({
+        where: {
+          id_program: idProgramInt,
+          id_mentee: menteeId,
+        },
+      });
+
+      if (!existingLog) {
+        // add idMentee and idProgram if mentee seen program
+        await prisma.$transaction([
+          prisma.view_log_program.create({
+            data: {
+              id_program: idProgramInt,
+              id_mentee: menteeId,
+            },
+          }),
+          // update atribut seen
+          prisma.program.update({
+            where: { id: idProgramInt },
+            data: { seen: { increment: 1 } },
+          }),
+        ]);
+      }
+
+      return res
+        .status(200)
+        .json({ message: "Berhasil mencatat view program." });
+    } catch (error) {
+      console.error("Gagal mencatat view program:", error);
+      return res.status(500).json({
+        message: "Terjadi kesalahan server.",
         error: error.message,
       });
     }
