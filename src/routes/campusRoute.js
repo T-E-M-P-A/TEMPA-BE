@@ -9,10 +9,11 @@ import { spawn } from "child_process";
 import { fileURLToPath } from "url";
 import path, { dirname } from "path";
 import multer from "multer";
-import fs from "fs"; // <-- Impor modul 'fs' untuk operasi file
+import fs from "fs";
 import formatPathToUrl from "../controllers/formatPathUrl.js"; // Helper untuk format URL gambar
 import bcrypt from "bcrypt";
 import nodemailer from "nodemailer";
+import mailQueue from "../lib/mailQueue.js";
 
 const router = express.Router();
 
@@ -3161,6 +3162,85 @@ router.post(
       });
     } catch (error) {
       console.error("Gagal mengirim pesan:", error);
+      return res.status(500).json({
+        message: "Terjadi kesalahan server saat mengirim pesan.",
+        error: error.message,
+      });
+    }
+  }
+);
+
+// send bulk message to mentees
+router.post(
+  "/send-bulk-message",
+  authenticateUser,
+  authorizeRoles(["campus"]),
+  async (req, res) => {
+    const { subject, message, idCampus, idMentee } = req.body;
+    const senderId = req.user.id;
+
+    if (
+      !subject ||
+      !message ||
+      !idMentee ||
+      !Array.isArray(idMentee) ||
+      idMentee.length === 0
+    ) {
+      return res.status(400).json({
+        message: "Subject, message, dan idMentee (array) wajib diisi.",
+      });
+    }
+
+    // Validasi idCampus jika dikirim
+    if (idCampus && parseInt(idCampus) !== senderId) {
+      return res.status(403).json({
+        message: "Anda tidak berhak mengirim pesan atas nama kampus lain.",
+      });
+    }
+
+    try {
+      // Ambil data kampus pengirim
+      const campus = await prisma.campus.findUnique({
+        where: { id: senderId },
+        select: { campus_name: true },
+      });
+
+      if (!campus) {
+        return res.status(404).json({
+          message: "Data kampus pengirim tidak ditemukan.",
+        });
+      }
+
+      // Ambil data mentee
+      const mentees = await prisma.mentee.findMany({
+        where: {
+          id: { in: idMentee.map((id) => parseInt(id)) },
+        },
+        select: { email: true, username: true },
+      });
+
+      if (mentees.length === 0) {
+        return res.status(404).json({
+          message: "Tidak ada mentee yang ditemukan dengan ID yang diberikan.",
+        });
+      }
+
+      // 3. Masukkan ke Antrean (TIDAK di-await agar respon instan)
+      mentees.forEach((mentee) => {
+        mailQueue.push({
+          menteeEmail: mentee.email,
+          menteeUsername: mentee.username,
+          campusName: campus.campus_name,
+          subject: subject,
+          message: message,
+        });
+      });
+
+      return res.status(200).json({
+        message: `Pesan berhasil dikirim ke ${mentees.length} mentee.`,
+      });
+    } catch (error) {
+      console.error("Gagal mengirim pesan bulk:", error);
       return res.status(500).json({
         message: "Terjadi kesalahan server saat mengirim pesan.",
         error: error.message,
