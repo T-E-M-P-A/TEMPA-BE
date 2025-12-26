@@ -12,6 +12,7 @@ import multer from "multer";
 import fs from "fs"; // <-- Impor modul 'fs' untuk operasi file
 import formatPathToUrl from "../controllers/formatPathUrl.js"; // Helper untuk format URL gambar
 import bcrypt from "bcrypt";
+import nodemailer from "nodemailer";
 
 const router = express.Router();
 
@@ -723,6 +724,7 @@ router.get(
               mentee: {
                 // Relasi ke detail mentee
                 select: {
+                  id: true,
                   username: true,
                   email: true,
                   gender: true,
@@ -775,6 +777,7 @@ router.get(
         registered_mentees: item._count?.mentee_progress || 0,
         // ✅ MAP dan bersihkan list mentee agar lebih mudah diakses di frontend
         mentee_list: item.mentee_progress.map((mp) => ({
+          id: mp.mentee?.id,
           username: mp.mentee?.username,
           email: mp.mentee?.email,
           gender: mp.mentee?.gender,
@@ -3042,6 +3045,124 @@ router.delete(
       console.error("Gagal menghapus materi:", error);
       return res.status(500).json({
         message: "Terjadi kesalahan server saat menghapus materi.",
+        error: error.message,
+      });
+    }
+  }
+);
+
+// send message to mentee
+router.post(
+  "/send-message-to-mentee",
+  authenticateUser,
+  authorizeRoles(["campus"]),
+  async (req, res) => {
+    const { subject, message, idCampus, idMentee } = req.body;
+    const senderId = req.user.id;
+
+    if (!subject || !message || !idMentee) {
+      return res.status(400).json({
+        message: "Subject, message, dan idMentee wajib diisi.",
+      });
+    }
+
+    // Validasi idCampus jika dikirim
+    if (idCampus && parseInt(idCampus) !== senderId) {
+      return res.status(403).json({
+        message: "Anda tidak berhak mengirim pesan atas nama kampus lain.",
+      });
+    }
+
+    try {
+      // Ambil data mentee
+      const mentee = await prisma.mentee.findUnique({
+        where: { id: parseInt(idMentee) },
+        select: { email: true, username: true },
+      });
+
+      if (!mentee) {
+        return res.status(404).json({
+          message: "Mentee tidak ditemukan.",
+        });
+      }
+
+      // Ambil data kampus pengirim
+      const campus = await prisma.campus.findUnique({
+        where: { id: senderId },
+        select: { campus_name: true },
+      });
+
+      if (!campus) {
+        return res.status(404).json({
+          message: "Data kampus pengirim tidak ditemukan.",
+        });
+      }
+
+      // Konfigurasi Nodemailer
+      const transporter = nodemailer.createTransport({
+        service: "gmail", // Sesuaikan dengan provider email Anda (misal: gmail)
+        auth: {
+          user: process.env.EMAIL_USER, // Pastikan env ini diset
+          pass: process.env.EMAIL_PASS, // Pastikan env ini diset (App Password jika Gmail)
+        },
+      });
+
+      // Path ke logo lokal
+      const logoPath = path.join(process.cwd(), "assets", "logo-text.png");
+      const attachments = [];
+      if (fs.existsSync(logoPath)) {
+        attachments.push({
+          filename: "logo-text.png",
+          path: logoPath,
+          cid: "logoTempa",
+        });
+      }
+
+      // Kirim Email
+      await transporter.sendMail({
+        from: process.env.EMAIL_USER,
+        to: mentee.email,
+        subject: subject,
+        html: `
+          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e0e0e0; border-radius: 8px; background-color: #ffffff;">
+            <div style="text-align: center; margin-bottom: 20px;">
+              ${
+                fs.existsSync(logoPath)
+                  ? '<img src="cid:logoTempa" alt="TEMPA Logo" style="max-width: 150px; height: auto;" />'
+                  : "<h2>TEMPA</h2>"
+              }
+            </div>
+            <h2 style="color: #333; text-align: center;">Pesan Baru dari ${
+              campus.campus_name
+            }</h2>
+            <p style="font-size: 16px; color: #555;">Halo <strong>${
+              mentee.username
+            }</strong>,</p>
+            <p style="font-size: 16px; color: #555; line-height: 1.5;">
+              Anda menerima pesan baru dari kampus <strong>${
+                campus.campus_name
+              }</strong>:
+            </p>
+            <div style="background-color: #f9f9f9; border-left: 5px solid #013B35; padding: 15px; margin: 20px 0;">
+              <p style="margin: 0; font-weight: bold; color: #013B35;">${subject}</p>
+              <p style="margin: 5px 0 0; color: #555;">${message}</p>
+            </div>
+            <br>
+            <p style="font-size: 16px; color: #555;">Salam hangat,<br><strong>${
+              campus.campus_name
+            }</strong></p>
+          </div>
+        `,
+        attachments: attachments,
+      });
+
+      return res.status(200).json({
+        message: "Pesan berhasil dikirim ke email mentee.",
+      });
+    } catch (error) {
+      console.error("Gagal mengirim pesan:", error);
+      return res.status(500).json({
+        message: "Terjadi kesalahan server saat mengirim pesan.",
         error: error.message,
       });
     }
