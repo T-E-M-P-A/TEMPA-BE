@@ -2444,6 +2444,76 @@ router.put(
 );
 
 // =======================================================================
+// UPDATE CAMPUS LOCATION
+// =======================================================================
+router.put(
+  "/update-location",
+  authenticateUser,
+  authorizeRoles(["campus"]),
+  async (req, res) => {
+    const { idCampus, province, city, subdistrict, ward, lat, lng } = req.body;
+    const senderId = req.user.id;
+
+    // Validasi idCampus jika ada di body
+    if (idCampus && parseInt(idCampus) !== senderId) {
+      return res.status(403).json({
+        message: "Anda tidak diizinkan mengupdate data kampus lain.",
+      });
+    }
+
+    if (
+      !province ||
+      !city ||
+      !subdistrict ||
+      !ward ||
+      lat === undefined ||
+      lng === undefined
+    ) {
+      return res.status(400).json({
+        message:
+          "Field province, city, subdistrict, ward, lat, dan lng wajib diisi.",
+      });
+    }
+
+    try {
+      const parsedLat = parseFloat(lat);
+      const parsedLng = parseFloat(lng);
+
+      if (isNaN(parsedLat) || isNaN(parsedLng)) {
+        return res.status(400).json({
+          message: "Latitude dan Longitude harus berupa angka valid.",
+        });
+      }
+
+      const updatedCampus = await prisma.campus.update({
+        where: {
+          id: senderId,
+        },
+        data: {
+          province: province,
+          city: city,
+          subdistrict: subdistrict,
+          ward: ward,
+          lat: parsedLat,
+          lng: parsedLng,
+        },
+      });
+
+      return res.status(200).json({
+        message: "Data lokasi kampus berhasil diperbarui.",
+        data: updatedCampus,
+      });
+    } catch (error) {
+      console.error("Gagal update lokasi kampus:", error);
+      return res.status(500).json({
+        message: "Terjadi kesalahan server saat memperbarui lokasi.",
+        error: error.message,
+      });
+    }
+  }
+);
+
+// =======================================================================
 // DELETE MENTOR FROM PROGRAM (Unassign Mentor)
 // =======================================================================
 router.delete(
