@@ -25,6 +25,7 @@ model mentee {
   mentee_progress       mentee_progress[]
   program_feedback      program_feedback[]
   recomendation_majors  recomendation_majors[]
+  view_log_campus       view_log_campus[]
   view_log_program      view_log_program[]
 }
 
@@ -68,10 +69,12 @@ model campus {
   lng                               Float?                     @db.Float
   verification_status               campus_verification_status
   badge                             Boolean                    @default(false)
+  seen                              Int                        @default(0)
   sub_google_id                     String                     @unique
   major                             major[]
   mentor                            mentor[]
   program_program_id_campusTocampus program[]                  @relation("program_id_campusTocampus")
+  view_log_campus                   view_log_campus[]
 }
 
 model standard_major {
@@ -248,6 +251,17 @@ model view_log_program {
 
   @@index([id_mentee], map: "id_mentee")
   @@index([id_program, id_mentee], map: "id_program")
+}
+
+model view_log_campus {
+  id        Int    @id @default(autoincrement())
+  id_mentee Int
+  id_campus Int
+  campus    campus @relation(fields: [id_campus], references: [id], onDelete: NoAction, map: "view_log_campus_ibfk_1")
+  mentee    mentee @relation(fields: [id_mentee], references: [id], onDelete: NoAction, map: "view_log_campus_ibfk_2")
+
+  @@index([id_campus], map: "id_campus")
+  @@index([id_mentee, id_campus], map: "id_mentee")
 }
 
 enum visibility_materi {

@@ -2198,6 +2198,7 @@ router.get(
           lat: true,
           lng: true,
           badge: true,
+          seen: true,
           major: {
             include: {
               standard_major: true,
@@ -3315,6 +3316,112 @@ router.post(
       console.error("Gagal mengirim pesan bulk:", error);
       return res.status(500).json({
         message: "Terjadi kesalahan server saat mengirim pesan.",
+        error: error.message,
+      });
+    }
+  }
+);
+
+// =======================================================================
+// GET DASHBOARD STATISTICS
+// =======================================================================
+router.get(
+  "/get-dashboard-statistics",
+  authenticateUser,
+  authorizeRoles(["campus"]),
+  async (req, res) => {
+    const idCampus = req.user.id;
+
+    try {
+      // 1. Total Kunjungan Profil (Campus Seen)
+      const campusData = await prisma.campus.findUnique({
+        where: { id: idCampus },
+        select: { seen: true },
+      });
+
+      // 2. Total Kunjungan Program (Program Seen Sum)
+      const programSeen = await prisma.program.aggregate({
+        where: { id_campus: idCampus },
+        _sum: { seen: true },
+      });
+
+      // 3. Data Mentee Major Interest (Global)
+      const majorInterests = await prisma.standard_major.findMany({
+        select: {
+          id: true,
+          major_name: true,
+          _count: {
+            select: {
+              mentee_major_interest: true,
+            },
+          },
+        },
+        orderBy: {
+          mentee_major_interest: {
+            _count: "desc",
+          },
+        },
+      });
+
+      const formattedMajorInterests = majorInterests.map((m) => ({
+        major_name: m.major_name,
+        total_interest: m._count.mentee_major_interest,
+      }));
+
+      // 4. Data City Mentee (Global)
+      const cityDistribution = await prisma.mentee.groupBy({
+        by: ["city"],
+        _count: {
+          city: true,
+        },
+        where: {
+          city: {
+            not: null,
+          },
+        },
+        orderBy: {
+          _count: {
+            city: "desc",
+          },
+        },
+      });
+
+      const formattedCityDistribution = cityDistribution.map((item) => ({
+        city: item.city,
+        total: item._count.city,
+      }));
+
+      // 5. Data Education Status Mentee (Global)
+      const educationStatusDistribution = await prisma.mentee.groupBy({
+        by: ["education_status"],
+        _count: {
+          education_status: true,
+        },
+      });
+
+      const formattedEducationStatus = educationStatusDistribution.map(
+        (item) => ({
+          status: item.education_status,
+          total: item._count.education_status,
+        })
+      );
+
+      return res.status(200).json({
+        message: "Data statistik dashboard berhasil diambil.",
+        data: {
+          total_profile_visits: campusData?.seen || 0,
+          total_program_visits: programSeen._sum.seen || 0,
+          major_interests: formattedMajorInterests,
+          mentee_demographics: {
+            city_distribution: formattedCityDistribution,
+            education_status_distribution: formattedEducationStatus,
+          },
+        },
+      });
+    } catch (error) {
+      console.error("Gagal mengambil statistik dashboard:", error);
+      return res.status(500).json({
+        message: "Terjadi kesalahan server saat mengambil statistik.",
         error: error.message,
       });
     }

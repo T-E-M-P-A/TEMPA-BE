@@ -1636,6 +1636,60 @@ router.post(
   }
 );
 
+// add seen every mentee see detail campus
+router.post(
+  "/mentee/add-seen-campus/:idCampus",
+  authenticateUser,
+  authorizeRoles(["mentee"]),
+  async (req, res) => {
+    // console.log(req.user.id);
+
+    const menteeId = req.user.id;
+    const idCampus = parseInt(req.params.idCampus);
+
+    if (isNaN(idCampus)) {
+      return res.status(400).json({ message: "ID Kampus tidak valid." });
+    }
+
+    try {
+      // check log in table view_log_program if mentee never seen the program
+      const existingLog = await prisma.view_log_campus.findFirst({
+        where: {
+          id_campus: idCampus,
+          id_mentee: menteeId,
+        },
+      });
+
+      if (!existingLog) {
+        // add idMentee and idCampus if mentee seen campus detail page
+        await prisma.$transaction([
+          prisma.view_log_campus.create({
+            data: {
+              id_campus: idCampus,
+              id_mentee: menteeId,
+            },
+          }),
+          // update atribut seen
+          prisma.campus.update({
+            where: { id: idCampus },
+            data: { seen: { increment: 1 } },
+          }),
+        ]);
+      }
+
+      return res
+        .status(200)
+        .json({ message: "Berhasil mencatat view kampus." });
+    } catch (error) {
+      console.error("Gagal mencatat view kampus:", error);
+      return res.status(500).json({
+        message: "Terjadi kesalahan server.",
+        error: error.message,
+      });
+    }
+  }
+);
+
 // test midleware
 router.post(
   "/testing-midleware-mentee",
