@@ -2197,6 +2197,7 @@ router.get(
           ward: true,
           lat: true,
           lng: true,
+          badge: true,
           major: {
             include: {
               standard_major: true,
@@ -2205,7 +2206,7 @@ router.get(
         },
       });
 
-      console.log(campusDetail);
+      // console.log(campusDetail);
 
       if (!campusDetail) {
         return res

@@ -308,6 +308,7 @@ router.get(
               email: true,
               path_logo: true,
               path_banner: true,
+              badge: true,
             },
           },
           campus_program_id_majorTocampus: {
@@ -338,6 +339,8 @@ router.get(
       const majorName =
         item.campus_program_id_majorTocampus.standard_major.major_name;
 
+      const badge = item.campus_program_id_campusTocampus.badge;
+
       // 1. FORMAT PATH GAMBAR PROGRAM UTAMA
       // Gunakan fungsi helper untuk memformat path_gambar program
       const imageUrl = formatPathToUrl(item.path_gambar, BASE_URL);
@@ -356,6 +359,8 @@ router.get(
 
       formatGetDetailProgram.major_name = majorName;
       delete formatGetDetailProgram.campus_program_id_majorTocampus;
+
+      formatGetDetailProgram.badge = badge;
 
       // a. Hapus path_gambar lama dan tambahkan image_url baru ke level atas
       delete formatGetDetailProgram.path_gambar;
@@ -404,6 +409,9 @@ router.get(
           address: true,
           path_logo: true,
           path_banner: true,
+          province: true,
+          city: true,
+          badge: true,
         },
       });
 
@@ -468,12 +476,13 @@ router.get(
           email: true,
           path_logo: true,
           path_banner: true,
-          address: true,
+          province: true,
+          city: true,
           description: true,
           verification_status: false,
           sub_google_id: false,
           vision_mission: true,
-          password: false,
+          badge: true,
 
           program_program_id_campusTocampus: {
             where: {

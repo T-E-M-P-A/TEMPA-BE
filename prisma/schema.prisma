@@ -67,6 +67,7 @@ model campus {
   lat                               Float?                     @db.Float
   lng                               Float?                     @db.Float
   verification_status               campus_verification_status
+  badge                             Boolean                    @default(false)
   sub_google_id                     String                     @unique
   major                             major[]
   mentor                            mentor[]
