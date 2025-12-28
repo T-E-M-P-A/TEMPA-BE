@@ -722,6 +722,7 @@ router.get(
             select: {
               completion_status: true,
               final_score: true,
+              create_at: true,
               mentee: {
                 // Relasi ke detail mentee
                 select: {
@@ -747,6 +748,56 @@ router.get(
           message: "Program tidak ditemukan atau bukan milik kampus ini.",
         });
       }
+
+      // Ambil statistik distribusi kota mentee yang terdaftar di program ini
+      const cityDistribution = await prisma.mentee.groupBy({
+        by: ["city"],
+        where: {
+          mentee_progress: {
+            some: {
+              id_program: parsedIdProgram,
+            },
+          },
+          city: {
+            not: null,
+          },
+        },
+        _count: {
+          city: true,
+        },
+        orderBy: {
+          _count: {
+            city: "desc",
+          },
+        },
+      });
+
+      const formattedCityDistribution = cityDistribution.map((item) => ({
+        city: item.city,
+        total: item._count.city,
+      }));
+
+      // Ambil statistik status pendidikan mentee yang terdaftar di program ini
+      const educationStatusDistribution = await prisma.mentee.groupBy({
+        by: ["education_status"],
+        where: {
+          mentee_progress: {
+            some: {
+              id_program: parsedIdProgram,
+            },
+          },
+        },
+        _count: {
+          education_status: true,
+        },
+      });
+
+      const formattedEducationStatus = educationStatusDistribution.map(
+        (item) => ({
+          status: item.education_status,
+          total: item._count.education_status,
+        })
+      );
 
       const item = detailProgram;
 
@@ -777,7 +828,7 @@ router.get(
           item.campus_program_id_majorTocampus?.standard_major?.major_name ||
           null,
         registered_mentees: item._count?.mentee_progress || 0,
-        // ✅ MAP dan bersihkan list mentee agar lebih mudah diakses di frontend
+        // format data for mentee list
         mentee_list: item.mentee_progress.map((mp) => ({
           id: mp.mentee?.id,
           username: mp.mentee?.username,
@@ -785,8 +836,11 @@ router.get(
           gender: mp.mentee?.gender,
           completion_status: mp.completion_status,
           final_score: mp.final_score,
+          create_at: mp.create_at,
+          city_distribution: formattedCityDistribution,
+          education_status_distribution: formattedEducationStatus,
         })),
-        // ✅ Gunakan data materi yang sudah diformat
+        // format data for matery
         materi_list: formattedMateriList,
         mentor_list: item.program_mentor.map((pm) => ({
           id: pm.id,

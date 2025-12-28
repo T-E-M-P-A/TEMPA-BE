@@ -170,6 +170,7 @@ model mentee_progress {
   final_score       Int?
   id_mentee         Int
   id_program        Int
+  create_at         DateTime?                         @db.Date
   mentee            mentee                            @relation(fields: [id_mentee], references: [id], onDelete: Cascade, map: "mentee_progress_ibfk_1")
   program           program                           @relation(fields: [id_program], references: [id], onDelete: Cascade, map: "mentee_progress_ibfk_2")
 
