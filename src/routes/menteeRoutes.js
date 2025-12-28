@@ -654,6 +654,7 @@ router.post(
             completion_date: null,
             id_mentee: idMentee,
             id_program: idProgramInt,
+            create_at: new Date(),
           },
         });
 
