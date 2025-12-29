@@ -133,6 +133,12 @@ router.get(
         },
       });
 
+      const interest = await prisma.mentee_major_interest.findFirst({
+        where: {
+          id_mentee: menteeId,
+        },
+      });
+
       // Output always array
       const results = Array.isArray(menteeProgressWithProgram)
         ? menteeProgressWithProgram
@@ -166,6 +172,7 @@ router.get(
           progress_id: item.id,
           completion_status: item.completion_status,
           final_score: item.final_score,
+          // major_interest_status: !!interest,
 
           program_details: {
             id: item.program.id,
@@ -189,11 +196,12 @@ router.get(
         };
       });
 
-      console.log(programs);
+      // console.log(programs);
 
       return res.status(200).json({
         message: "Daftar program mentee berhasil diambil.",
         data: programs,
+        major_interest_status: !!interest,
       });
     } catch (error) {
       console.error("Kesalahan saat mengambil data program mentee:", error);
