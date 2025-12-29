@@ -345,6 +345,10 @@ router.get(
           sub_google_id: false,
           vision_mission: true,
           password: false,
+          province: true,
+          city: true,
+          subdistrict: true,
+          ward: true,
 
           program_program_id_campusTocampus: {
             where: {
