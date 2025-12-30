@@ -30,9 +30,10 @@ model mentee {
 }
 
 model admin {
-  id       Int    @id @default(autoincrement())
-  username String @unique @db.VarChar(225)
-  password String @db.VarChar(225)
+  id                   Int                    @id @default(autoincrement())
+  username             String                 @unique @db.VarChar(225)
+  password             String                 @db.VarChar(225)
+  subscription_package subscription_package[]
 }
 
 model mentor {
@@ -71,9 +72,11 @@ model campus {
   badge                             Boolean                    @default(false)
   seen                              Int                        @default(0)
   sub_google_id                     String                     @unique
+  campus_subscription               campus_subscription[]
   major                             major[]
   mentor                            mentor[]
   program_program_id_campusTocampus program[]                  @relation("program_id_campusTocampus")
+  transaction                       transaction[]
   view_log_campus                   view_log_campus[]
 }
 
@@ -265,6 +268,58 @@ model view_log_campus {
   @@index([id_mentee, id_campus], map: "id_mentee")
 }
 
+model campus_subscription {
+  id                   Int                        @id @default(autoincrement())
+  doku_invoice         Int
+  status               campus_subscription_status
+  id_campus            Int
+  id_package           Int
+  start_date           DateTime                   @db.Timestamp(0)
+  expired_date         DateTime                   @db.Timestamp(0)
+  updated_at           DateTime                   @db.Timestamp(0)
+  subscription_package subscription_package       @relation(fields: [id_package], references: [id], onDelete: NoAction, map: "campus_subscription_ibfk_1")
+  campus               campus                     @relation(fields: [id_campus], references: [id], onDelete: NoAction, map: "campus_subscription_ibfk_2")
+
+  @@index([id_campus], map: "id_campus")
+  @@index([id_package], map: "id_package")
+}
+
+model subscription_package {
+  id                  Int                   @id @default(autoincrement())
+  package_name        String                @db.VarChar(225)
+  price               BigInt
+  benefit             Json
+  duration_month      Int
+  description         String                @db.VarChar(225)
+  sub_heading         String                @db.VarChar(40)
+  free_trial          Boolean               @default(false)
+  id_admin            Int
+  campus_subscription campus_subscription[]
+  admin               admin                 @relation(fields: [id_admin], references: [id], onDelete: NoAction, map: "subscription_package_ibfk_1")
+  transaction         transaction[]
+
+  @@index([id_admin], map: "id_admin")
+}
+
+model transaction {
+  id                   Int                  @id @default(autoincrement())
+  transaction_date     DateTime             @db.Timestamp(0)
+  doku_invoice_no      String               @db.VarChar(100)
+  payment_channel      String               @db.VarChar(50)
+  status               transaction_status
+  id_campus            Int
+  transaction_no       String               @db.VarChar(50)
+  id_package           Int
+  amount_original      BigInt
+  amount_final         BigInt
+  paid_at              DateTime             @db.Timestamp(0)
+  campus               campus               @relation(fields: [id_campus], references: [id], onDelete: NoAction, map: "transaction_ibfk_1")
+  subscription_package subscription_package @relation(fields: [id_package], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "transaction_ibfk_2")
+
+  @@index([id_campus], map: "id_campus")
+  @@index([id_package], map: "id_package")
+}
+
 enum visibility_materi {
   private
   public
@@ -319,4 +374,17 @@ enum mentee_education_status {
   Lulusan_Baru___Gap_Year__Belum_Kuliah_ @map("Lulusan Baru / Gap Year (Belum Kuliah)")
   Mahasiswa_Aktif                        @map("Mahasiswa Aktif")
   Lainnya
+}
+
+enum campus_subscription_status {
+  active
+  expired
+  cancelled
+}
+
+enum transaction_status {
+  pending
+  paid
+  failed
+  expired
 }
