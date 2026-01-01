@@ -1298,6 +1298,59 @@ router.put(
   }
 );
 
+// =======================================================================
+// DELETE SUBSCRIPTION PACKAGE
+// =======================================================================
+router.delete(
+  "/delete-subscription-package/:id",
+  authenticateUser,
+  authorizeRoles(["admin"]),
+  async (req, res) => {
+    const { id } = req.params;
+    const idPackage = parseInt(id);
+
+    if (isNaN(idPackage)) {
+      return res.status(400).json({
+        message: "ID Paket tidak valid. Harus berupa angka.",
+      });
+    }
+
+    try {
+      // Cek keberadaan paket
+      const existingPackage = await prisma.subscription_package.findUnique({
+        where: { id: idPackage },
+      });
+
+      if (!existingPackage) {
+        return res.status(404).json({
+          message: "Paket berlangganan tidak ditemukan.",
+        });
+      }
+
+      await prisma.subscription_package.delete({
+        where: { id: idPackage },
+      });
+
+      return res.status(200).json({
+        message: "Paket berlangganan berhasil dihapus.",
+      });
+    } catch (error) {
+      console.error("Gagal menghapus paket berlangganan:", error);
+      // Handle foreign key constraint error (P2003) jika paket sudah pernah dibeli/digunakan
+      if (error.code === "P2003") {
+        return res.status(409).json({
+          message:
+            "Gagal menghapus: Paket ini sedang digunakan oleh kampus atau terdapat dalam riwayat transaksi.",
+        });
+      }
+      return res.status(500).json({
+        message: "Terjadi kesalahan server saat menghapus paket.",
+        error: error.message,
+      });
+    }
+  }
+);
+
 // test midleware
 router.post(
   "/testing-midleware",
