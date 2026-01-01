@@ -1115,6 +1115,41 @@ router.delete(
   }
 );
 
+// =======================================================================
+// GET SUBSCRIPTION PACKAGES
+// =======================================================================
+router.get(
+  "/subscription-packages",
+  authenticateUser,
+  authorizeRoles(["admin"]),
+  async (req, res) => {
+    try {
+      const packages = await prisma.subscription_package.findMany({
+        orderBy: {
+          price: "asc",
+        },
+      });
+
+      // Convert BigInt to Number to avoid serialization error
+      const formattedPackages = packages.map((pkg) => ({
+        ...pkg,
+        price: Number(pkg.price),
+      }));
+
+      return res.status(200).json({
+        message: "Data paket berlangganan berhasil diambil.",
+        data: formattedPackages,
+      });
+    } catch (error) {
+      console.error("Gagal mengambil data paket berlangganan:", error);
+      return res.status(500).json({
+        message: "Terjadi kesalahan server saat mengambil data paket.",
+        error: error.message,
+      });
+    }
+  }
+);
+
 // test midleware
 router.post(
   "/testing-midleware",
