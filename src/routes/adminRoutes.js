@@ -1150,6 +1150,77 @@ router.get(
   }
 );
 
+// =======================================================================
+// CREATE SUBSCRIPTION PACKAGE
+// =======================================================================
+router.post(
+  "/create-subscription-package",
+  authenticateUser,
+  authorizeRoles(["admin"]),
+  async (req, res) => {
+    const {
+      package_name,
+      logo_name,
+      price,
+      duration_month,
+      description,
+      sub_heading,
+      isPopular,
+      free_trial,
+      benefit,
+    } = req.body;
+    const idAdmin = req.user.id;
+
+    // Validasi field wajib
+    if (
+      !package_name ||
+      price === undefined ||
+      !duration_month ||
+      !description ||
+      !sub_heading ||
+      !benefit
+    ) {
+      return res.status(400).json({
+        message: "Semua field wajib diisi.",
+      });
+    }
+
+    try {
+      const newPackage = await prisma.subscription_package.create({
+        data: {
+          package_name,
+          logo_name,
+          price: BigInt(price), // Konversi ke BigInt
+          duration_month: parseInt(duration_month),
+          description,
+          sub_heading,
+          isPopular: isPopular || false,
+          free_trial: free_trial || false,
+          benefit: benefit, // Prisma otomatis menangani JSON array
+          id_admin: idAdmin,
+        },
+      });
+
+      // Konversi BigInt ke Number agar bisa dikirim sebagai JSON response
+      const formattedPackage = {
+        ...newPackage,
+        price: Number(newPackage.price),
+      };
+
+      return res.status(201).json({
+        message: "Paket berlangganan berhasil dibuat.",
+        data: formattedPackage,
+      });
+    } catch (error) {
+      console.error("Gagal membuat paket berlangganan:", error);
+      return res.status(500).json({
+        message: "Terjadi kesalahan server saat membuat paket.",
+        error: error.message,
+      });
+    }
+  }
+);
+
 // test midleware
 router.post(
   "/testing-midleware",
