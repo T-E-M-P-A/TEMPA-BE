@@ -29,12 +29,40 @@ router.post(
           id: true,
           price: true,
           package_name: true,
+          free_trial: true,
+          duration_month: true,
         },
       });
 
       if (!getSubscription) {
         console.log("Subscription tidak ditemukan");
         return res.status(404).json({ message: "Data tidak ditemukan" });
+      }
+
+      // verivication account campus
+      const getCampus = await prisma.campus.findFirst({
+        where: {
+          id: idCampus,
+        },
+        select: {
+          id: true,
+          verification_status: true,
+        },
+      });
+
+      if (!getCampus) {
+        return res.status(404).json({ message: "Kampus tidak ditemukan" });
+      }
+
+      // check verivication campus
+      if (
+        getCampus.verification_status === "null" ||
+        getCampus.verification_status === "rejected" ||
+        getCampus.verification_status === "pending"
+      ) {
+        return res.status(403).json({
+          message: "Akun kampus belum diverifikasi. Silakan hubungi admin.",
+        });
       }
 
       // 1. Ambil dari Dashboard DOKU Anda
@@ -83,33 +111,92 @@ router.post(
       //   url: "https://api-sandbox.doku.com/checkout/v1/payment",
       // });
 
-      // 7. Request ke DOKU (Menggunakan Axios)
-      const dokuResponse = await axios.post(
-        "https://api-sandbox.doku.com/checkout/v1/payment",
-        body,
-        {
-          timeout: 20000, // Naikkan ke 20 detik karena koneksi Anda tadi agak lambat
-          httpsAgent: new https.Agent({
-            keepAlive: true,
-            lookup: (hostname, options, callback) => {
-              // Custom lookup untuk memastikan DNS tidak macet
-              dns.lookup(hostname, options, callback);
+      if (getSubscription.free_trial) {
+        // check if campus already have subscription
+        const getCampusSubscription =
+          await prisma.campus_subscription.findFirst({
+            where: {
+              id_campus: idCampus,
+              id_package: idSubscription,
             },
-          }),
-          headers: {
-            "Client-Id": clientId,
-            "Request-Id": requestId,
-            "Request-Timestamp": timestamp,
-            Signature: `HMACSHA256=${signature}`,
-          },
-        }
-      );
+          });
 
-      // 8. Kirim URL pembayaran ke Frontend React
-      return res.status(200).json({
-        message: "Berhasil membuat payment intent",
-        paymentUrl: dokuResponse.data.response.payment.url, // INI YANG DIBUTUHKAN FRONTEND
-      });
+        if (getCampusSubscription) {
+          return res.status(400).json({
+            message: "Kampus sudah memiliki langganan ini",
+          });
+        }
+
+        await prisma.transaction.create({
+          data: {
+            transaction_date: new Date(),
+            doku_invoice_no: "INV-FREE-" + Date.now(),
+            payment_channel: "FREE_TRIAL",
+            status: "paid",
+            id_campus: idCampus,
+            transaction_no: "TRX-" + Date.now(),
+            id_package: idSubscription,
+            free_trial: true,
+            amount_original: getSubscription.price,
+            amount_final: 0,
+            duration_month: getSubscription.duration_month,
+            paid_at: new Date(),
+          },
+        });
+
+        // Aktifkan langganan kampus secara langsung
+        const startDate = new Date();
+        const expiredDate = new Date(startDate);
+        expiredDate.setMonth(
+          expiredDate.getMonth() + getSubscription.duration_month
+        );
+
+        await prisma.campus_subscription.create({
+          data: {
+            doku_invoice: 0, // 0 untuk free trial karena tipe data Int
+            status: "active",
+            id_campus: idCampus,
+            id_package: idSubscription,
+            start_date: startDate,
+            expired_date: expiredDate,
+            updated_at: new Date(),
+          },
+        });
+
+        // 8. Kirim URL pembayaran ke Frontend React
+        return res.status(200).json({
+          message: "Free trial berhasil diaktifkan",
+          isFree: true, // Flag untuk frontend
+        });
+      } else {
+        // 7. Request ke DOKU (Menggunakan Axios)
+        const dokuResponse = await axios.post(
+          "https://api-sandbox.doku.com/checkout/v1/payment",
+          body,
+          {
+            timeout: 20000, // Naikkan ke 20 detik karena koneksi Anda tadi agak lambat
+            httpsAgent: new https.Agent({
+              keepAlive: true,
+              lookup: (hostname, options, callback) => {
+                // Custom lookup untuk memastikan DNS tidak macet
+                dns.lookup(hostname, options, callback);
+              },
+            }),
+            headers: {
+              "Client-Id": clientId,
+              "Request-Id": requestId,
+              "Request-Timestamp": timestamp,
+              Signature: `HMACSHA256=${signature}`,
+            },
+          }
+        );
+
+        // 8. Kirim URL pembayaran ke Frontend React
+        return res.status(200).json({
+          message: "Berhasil membuat payment intent",
+          paymentUrl: dokuResponse.data.response.payment.url, // INI YANG DIBUTUHKAN FRONTEND
+        });
+      }
     } catch (error) {
       console.error(error.response?.data || error.message);
       return res.status(500).json({
