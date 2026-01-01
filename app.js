@@ -2,6 +2,7 @@ import express from "express";
 import morgan from "morgan";
 import cors from "cors";
 import menteeRoutes from "./src/routes/menteeRoutes.js";
+import paymentGateway from "./src/routes/paymentGateway.js";
 import adminRoutes from "./src/routes/adminRoutes.js";
 import campusRoutes from "./src/routes/campusRoute.js";
 import mentorRoutes from "./src/routes/mentorRoutes.js";
@@ -29,6 +30,9 @@ app.use("/api/v1/admin", adminRoutes);
 
 // campus route
 app.use("/api/v1", campusRoutes);
+
+// payment route
+app.use("/api/payment", paymentGateway);
 
 // mentor route
 app.use("/api/v1/mentor", mentorRoutes);

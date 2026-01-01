@@ -208,6 +208,13 @@ router.post("/login-campus", async (req, res) => {
     });
   } catch (error) {
     console.error("Token verification failed:", error.message);
+
+    if (error.message.includes("Wrong recipient")) {
+      const decoded = jwt.decode(token);
+      console.error(`[DEBUG] Backend CLIENT_ID: ${CLIENT_ID}`);
+      console.error(`[DEBUG] Token Audience (aud): ${decoded?.aud}`);
+    }
+
     res.status(401).json({ error: "Authentication failed. Invalid token." });
   }
 });
@@ -3476,6 +3483,41 @@ router.get(
       console.error("Gagal mengambil statistik dashboard:", error);
       return res.status(500).json({
         message: "Terjadi kesalahan server saat mengambil statistik.",
+        error: error.message,
+      });
+    }
+  }
+);
+
+// =======================================================================
+// GET SUBSCRIPTION PACKAGES
+// =======================================================================
+router.get(
+  "/subscription-packages",
+  authenticateUser,
+  authorizeRoles(["campus"]),
+  async (req, res) => {
+    try {
+      const packages = await prisma.subscription_package.findMany({
+        orderBy: {
+          price: "asc",
+        },
+      });
+
+      // Convert BigInt to Number to avoid serialization error
+      const formattedPackages = packages.map((pkg) => ({
+        ...pkg,
+        price: Number(pkg.price),
+      }));
+
+      return res.status(200).json({
+        message: "Data paket berlangganan berhasil diambil.",
+        data: formattedPackages,
+      });
+    } catch (error) {
+      console.error("Gagal mengambil data paket berlangganan:", error);
+      return res.status(500).json({
+        message: "Terjadi kesalahan server saat mengambil data paket.",
         error: error.message,
       });
     }

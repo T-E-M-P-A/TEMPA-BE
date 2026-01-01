@@ -287,12 +287,14 @@ model campus_subscription {
 model subscription_package {
   id                  Int                   @id @default(autoincrement())
   package_name        String                @db.VarChar(225)
+  logo_name           String                @db.VarChar(225)
   price               BigInt
   benefit             Json
   duration_month      Int
   description         String                @db.VarChar(225)
   sub_heading         String                @db.VarChar(40)
   free_trial          Boolean               @default(false)
+  isPopular           Boolean               @default(false)
   id_admin            Int
   campus_subscription campus_subscription[]
   admin               admin                 @relation(fields: [id_admin], references: [id], onDelete: NoAction, map: "subscription_package_ibfk_1")
