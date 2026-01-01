@@ -1221,6 +1221,83 @@ router.post(
   }
 );
 
+// =======================================================================
+// UPDATE SUBSCRIPTION PACKAGE
+// =======================================================================
+router.put(
+  "/update-subscription-package/:id",
+  authenticateUser,
+  authorizeRoles(["admin"]),
+  async (req, res) => {
+    const { id } = req.params;
+    const idPackage = parseInt(id);
+
+    if (isNaN(idPackage)) {
+      return res.status(400).json({
+        message: "ID Paket tidak valid. Harus berupa angka.",
+      });
+    }
+
+    const {
+      package_name,
+      logo_name,
+      price,
+      duration_month,
+      description,
+      sub_heading,
+      isPopular,
+      free_trial,
+      benefit,
+    } = req.body;
+
+    try {
+      // Cek keberadaan paket
+      const existingPackage = await prisma.subscription_package.findUnique({
+        where: { id: idPackage },
+      });
+
+      if (!existingPackage) {
+        return res.status(404).json({
+          message: "Paket berlangganan tidak ditemukan.",
+        });
+      }
+
+      const dataToUpdate = {};
+      if (package_name) dataToUpdate.package_name = package_name;
+      if (logo_name) dataToUpdate.logo_name = logo_name;
+      if (price !== undefined) dataToUpdate.price = BigInt(price);
+      if (duration_month !== undefined)
+        dataToUpdate.duration_month = parseInt(duration_month);
+      if (description) dataToUpdate.description = description;
+      if (sub_heading) dataToUpdate.sub_heading = sub_heading;
+      if (isPopular !== undefined) dataToUpdate.isPopular = isPopular;
+      if (free_trial !== undefined) dataToUpdate.free_trial = free_trial;
+      if (benefit) dataToUpdate.benefit = benefit;
+
+      const updatedPackage = await prisma.subscription_package.update({
+        where: { id: idPackage },
+        data: dataToUpdate,
+      });
+
+      const formattedPackage = {
+        ...updatedPackage,
+        price: Number(updatedPackage.price),
+      };
+
+      return res.status(200).json({
+        message: "Paket berlangganan berhasil diperbarui.",
+        data: formattedPackage,
+      });
+    } catch (error) {
+      console.error("Gagal memperbarui paket berlangganan:", error);
+      return res.status(500).json({
+        message: "Terjadi kesalahan server saat memperbarui paket.",
+        error: error.message,
+      });
+    }
+  }
+);
+
 // test midleware
 router.post(
   "/testing-midleware",
