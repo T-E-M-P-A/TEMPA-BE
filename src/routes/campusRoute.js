@@ -2255,6 +2255,9 @@ router.get(
         where: {
           id_campus: idCampus,
           id_package: 2,
+          expired_date: {
+            gte: new Date(),
+          },
         },
       });
 
