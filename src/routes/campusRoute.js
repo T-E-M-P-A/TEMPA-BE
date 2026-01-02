@@ -1246,7 +1246,7 @@ router.post(
       mapLng,
     } = req.body;
 
-    console.log(req.body);
+    // console.log(req.body);
 
     // Validasi field wajib
     const requiredFields = {
@@ -1285,7 +1285,7 @@ router.post(
       // 2. Cari Major berdasarkan ID-nya dan pastikan milik kampus yang login
       const major = await prisma.major.findFirst({
         where: {
-          id: majorId,
+          id_standard_major: majorId,
           id_campus: parseInt(idCampus),
         },
         select: {
@@ -1336,7 +1336,7 @@ router.post(
         start_regis_date: new Date(startRegisDate),
         end_regis_date: new Date(endRegisDate),
         capacity: parsedCapacity,
-        program_status: "open", // Default status saat dibuat
+        // program_status: "open", // Default status saat dibuat
         id_campus: parseInt(idCampus),
         id_major: major.id,
         path_gambar: req.file.path.replace(/\\/g, "/"), // Simpan path dan normalisasi slash
@@ -2237,6 +2237,24 @@ router.get(
     const idCampus = req.user.id;
 
     try {
+      const checkSubscription = await prisma.campus_subscription.findFirst({
+        where: {
+          id_campus: idCampus,
+          id_package: 2,
+        },
+      });
+
+      if (checkSubscription) {
+        const updateBadge = await prisma.campus.update({
+          where: {
+            id: idCampus,
+          },
+          data: {
+            badge: true,
+          },
+        });
+      }
+
       const campusDetail = await prisma.campus.findUnique({
         where: {
           id: idCampus,
@@ -3394,6 +3412,23 @@ router.get(
     const idCampus = req.user.id;
 
     try {
+      const getCampusSubscription = await prisma.campus_subscription.findFirst({
+        where: {
+          id_campus: idCampus,
+          id_package: 2,
+          expired_date: {
+            gte: new Date(),
+          },
+        },
+      });
+
+      // check subscription
+      if (!getCampusSubscription) {
+        return res.status(403).json({
+          message: "Subscription required to access this resource.",
+        });
+      }
+
       // 1. Total Kunjungan Profil (Campus Seen)
       const campusData = await prisma.campus.findUnique({
         where: { id: idCampus },
