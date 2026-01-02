@@ -677,6 +677,16 @@ router.get(
     }
 
     try {
+      const getCampusSubscription = await prisma.campus_subscription.findFirst({
+        where: {
+          id_campus: idCampus,
+          id_package: 2,
+          expired_date: {
+            gte: new Date(),
+          },
+        },
+      });
+
       const detailProgram = await prisma.program.findUnique({
         where: {
           id: parsedIdProgram,
@@ -756,55 +766,58 @@ router.get(
         });
       }
 
-      // Ambil statistik distribusi kota mentee yang terdaftar di program ini
-      const cityDistribution = await prisma.mentee.groupBy({
-        by: ["city"],
-        where: {
-          mentee_progress: {
-            some: {
-              id_program: parsedIdProgram,
+      let formattedCityDistribution = [];
+      let formattedEducationStatus = [];
+
+      if (getCampusSubscription) {
+        // Ambil statistik distribusi kota mentee yang terdaftar di program ini
+        const cityDistribution = await prisma.mentee.groupBy({
+          by: ["city"],
+          where: {
+            mentee_progress: {
+              some: {
+                id_program: parsedIdProgram,
+              },
+            },
+            city: {
+              not: null,
             },
           },
-          city: {
-            not: null,
-          },
-        },
-        _count: {
-          city: true,
-        },
-        orderBy: {
           _count: {
-            city: "desc",
+            city: true,
           },
-        },
-      });
-
-      const formattedCityDistribution = cityDistribution.map((item) => ({
-        city: item.city,
-        total: item._count.city,
-      }));
-
-      // Ambil statistik status pendidikan mentee yang terdaftar di program ini
-      const educationStatusDistribution = await prisma.mentee.groupBy({
-        by: ["education_status"],
-        where: {
-          mentee_progress: {
-            some: {
-              id_program: parsedIdProgram,
+          orderBy: {
+            _count: {
+              city: "desc",
             },
           },
-        },
-        _count: {
-          education_status: true,
-        },
-      });
+        });
 
-      const formattedEducationStatus = educationStatusDistribution.map(
-        (item) => ({
+        formattedCityDistribution = cityDistribution.map((item) => ({
+          city: item.city,
+          total: item._count.city,
+        }));
+
+        // Ambil statistik status pendidikan mentee yang terdaftar di program ini
+        const educationStatusDistribution = await prisma.mentee.groupBy({
+          by: ["education_status"],
+          where: {
+            mentee_progress: {
+              some: {
+                id_program: parsedIdProgram,
+              },
+            },
+          },
+          _count: {
+            education_status: true,
+          },
+        });
+
+        formattedEducationStatus = educationStatusDistribution.map((item) => ({
           status: item.education_status,
           total: item._count.education_status,
-        })
-      );
+        }));
+      }
 
       const item = detailProgram;
 
@@ -836,10 +849,11 @@ router.get(
           null,
         registered_mentees: item._count?.mentee_progress || 0,
         // format data for mentee list
+        free_trial: getCampusSubscription ? false : true,
         mentee_list: item.mentee_progress.map((mp) => ({
           id: mp.mentee?.id,
           username: mp.mentee?.username,
-          email: mp.mentee?.email,
+          email: getCampusSubscription ? mp.mentee?.email : null,
           gender: mp.mentee?.gender,
           completion_status: mp.completion_status,
           final_score: mp.final_score,
