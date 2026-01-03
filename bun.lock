@@ -4,6 +4,7 @@
     "": {
       "dependencies": {
         "@prisma/adapter-mariadb": "^6.16.2",
+        "@prisma/client": "^6.16.2",
         "bcrypt": "^6.0.0",
         "cors": "^2.8.5",
         "dotenv": "^17.2.2",
@@ -22,6 +23,8 @@
   },
   "packages": {
     "@prisma/adapter-mariadb": ["@prisma/adapter-mariadb@6.16.2", "", { "dependencies": { "@prisma/driver-adapter-utils": "6.16.2", "mariadb": "3.4.5" } }, "sha512-0IIOZ2hJ6a+JF0MeLrAfwLPA/2k2+Yi+rOoCZTBUnKzMDR2JG+D7kr/PZ3HURToE/b7aBsgbZmb8hly9GEZSTQ=="],
+
+    "@prisma/client": ["@prisma/client@6.16.2", "", { "peerDependencies": { "prisma": "*", "typescript": ">=5.1.0" }, "optionalPeers": ["prisma", "typescript"] }, "sha512-E00PxBcalMfYO/TWnXobBVUai6eW/g5OsifWQsQDzJYm7yaY+IRLo7ZLsaefi0QkTpxfuhFcQ/w180i6kX3iJw=="],
 
     "@prisma/config": ["@prisma/config@6.16.2", "", { "dependencies": { "c12": "3.1.0", "deepmerge-ts": "7.1.5", "effect": "3.16.12", "empathic": "2.0.0" } }, "sha512-mKXSUrcqXj0LXWPmJsK2s3p9PN+aoAbyMx7m5E1v1FufofR1ZpPoIArjjzOIm+bJRLLvYftoNYLx1tbHgF9/yg=="],
 

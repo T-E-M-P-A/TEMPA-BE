@@ -1,18 +1,46 @@
 {
   "dependencies": {
-    "@prisma/adapter-mariadb": "^6.16.2",
+    "@google/genai": "^1.27.0",
+    "@prisma/adapter-mariadb": "^6.19.1",
+    "@prisma/client": "^6.16.2",
+    "axios": "^1.13.2",
     "bcrypt": "^6.0.0",
     "cors": "^2.8.5",
+    "crypto": "^1.0.1",
     "dotenv": "^17.2.2",
     "express": "^5.1.0",
     "express-rate-limit": "^8.1.0",
+    "fastq": "^1.20.1",
     "google-auth-library": "^10.3.0",
     "helmet": "^8.1.0",
     "jsonwebtoken": "^9.0.2",
     "morgan": "^1.10.1",
-    "multer": "^2.0.2"
+    "multer": "^2.0.2",
+    "nodemailer": "^7.0.11"
   },
   "devDependencies": {
     "prisma": "^6.16.2"
-  }
+  },
+  "prisma": {
+    "seed": "node prisma/seed.js"
+  },
+  "name": "tempa-be",
+  "version": "1.0.0",
+  "type": "module",
+  "description": "",
+  "main": "app.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "seed:mentor": "node prisma/seedMentor.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/T-E-M-P-A/TEMPA-BE.git"
+  },
+  "author": "apipu",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/T-E-M-P-A/TEMPA-BE/issues"
+  },
+  "homepage": "https://github.com/T-E-M-P-A/TEMPA-BE#readme"
 }
