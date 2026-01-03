@@ -3586,12 +3586,16 @@ router.get(
         price: Number(pkg.price),
       }));
 
-      const formattedCampusSubscription = {
-        id_package: getCampusSubscription.id_package,
-        expired_date: getCampusSubscription.expired_date,
-        package_name: getCampusSubscription.subscription_package?.package_name,
-        sub_heading: getCampusSubscription.subscription_package?.sub_heading,
-      };
+      const formattedCampusSubscription = getCampusSubscription
+        ? {
+            id_package: getCampusSubscription.id_package,
+            expired_date: getCampusSubscription.expired_date,
+            package_name:
+              getCampusSubscription.subscription_package?.package_name,
+            sub_heading:
+              getCampusSubscription.subscription_package?.sub_heading,
+          }
+        : null;
 
       return res.status(200).json({
         message: "Data paket berlangganan berhasil diambil.",
