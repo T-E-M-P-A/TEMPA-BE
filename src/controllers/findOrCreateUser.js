@@ -21,7 +21,7 @@ export async function findOrCreateUser(userData) {
         sub_google_id: googleSubId,
         username: name,
         email: email,
-        status: "Active",
+        verify_status: false,
       },
     });
 
