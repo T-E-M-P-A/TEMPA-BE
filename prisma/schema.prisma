@@ -8,19 +8,19 @@ datasource db {
 }
 
 model mentee {
-  id                    Int                     @id @default(autoincrement())
-  sub_google_id         String                  @unique
-  username              String                  @db.VarChar(255)
-  email                 String                  @unique @db.VarChar(225)
-  password              String?                 @db.Text
-  education_status      mentee_education_status
-  verify_status         Boolean?                @default(false)
+  id                    Int                      @id @default(autoincrement())
+  sub_google_id         String                   @unique
+  username              String                   @db.VarChar(255)
+  email                 String                   @unique @db.VarChar(225)
+  password              String?                  @db.Text
+  education_status      mentee_education_status?
+  verify_status         Boolean?                 @default(false)
   gender                gender?
-  date_of_birth         DateTime?               @db.Date
-  province              String?                 @db.VarChar(225)
-  city                  String?                 @db.VarChar(225)
-  subdistrict           String?                 @db.VarChar(225)
-  ward                  String?                 @db.VarChar(225)
+  date_of_birth         DateTime?                @db.Date
+  province              String?                  @db.VarChar(225)
+  city                  String?                  @db.VarChar(225)
+  subdistrict           String?                  @db.VarChar(225)
+  ward                  String?                  @db.VarChar(225)
   mentee_major_interest mentee_major_interest[]
   mentee_progress       mentee_progress[]
   program_feedback      program_feedback[]
