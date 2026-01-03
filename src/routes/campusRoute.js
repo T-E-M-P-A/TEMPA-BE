@@ -3549,10 +3549,34 @@ router.get(
   authenticateUser,
   authorizeRoles(["campus"]),
   async (req, res) => {
+    const idCampus = req.user.id;
+
     try {
       const packages = await prisma.subscription_package.findMany({
         orderBy: {
           price: "asc",
+        },
+      });
+
+      // get subscription campus
+      const getCampusSubscription = await prisma.campus_subscription.findFirst({
+        where: {
+          id_campus: idCampus,
+          status: "active",
+          expired_date: {
+            gte: new Date(),
+          },
+        },
+        select: {
+          id_package: true,
+          expired_date: true,
+          subscription_package: {
+            select: {
+              id: true,
+              package_name: true,
+              sub_heading: true,
+            },
+          },
         },
       });
 
@@ -3562,9 +3586,17 @@ router.get(
         price: Number(pkg.price),
       }));
 
+      const formattedCampusSubscription = {
+        id_package: getCampusSubscription.id_package,
+        expired_date: getCampusSubscription.expired_date,
+        package_name: getCampusSubscription.subscription_package?.package_name,
+        sub_heading: getCampusSubscription.subscription_package?.sub_heading,
+      };
+
       return res.status(200).json({
         message: "Data paket berlangganan berhasil diambil.",
         data: formattedPackages,
+        campusSubscription: formattedCampusSubscription,
       });
     } catch (error) {
       console.error("Gagal mengambil data paket berlangganan:", error);
