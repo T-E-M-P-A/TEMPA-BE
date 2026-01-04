@@ -637,6 +637,12 @@ router.post(
         return res.status(404).json({ message: "Program tidak ditemukan." });
       }
 
+      if (new Date(programData.start_regis_date) > new Date()) {
+        return res.status(409).json({
+          message: "Pendaftaran belum dibuka!",
+        });
+      }
+
       if (new Date(programData.end_regis_date) < new Date()) {
         return res.status(409).json({
           message: "Pendaftaran sudah tutup!",
