@@ -541,6 +541,7 @@ router.get(
           item.campus_program_id_majorTocampus?.standard_major?.major_name ||
           null,
         registered_mentees: item._count?.mentee_progress || 0,
+        idCampus: getCampusSubscription?.id_campus || null,
         free_trial: getCampusSubscription ? false : true,
         // format data for mentee list
         mentee_list: item.mentee_progress.map((mp) => ({
