@@ -312,7 +312,8 @@ router.get(
             select: {
               id: true,
               campus_name: true,
-              address: true,
+              province: true,
+              city: true,
               email: true,
               path_logo: true,
               path_banner: true,
