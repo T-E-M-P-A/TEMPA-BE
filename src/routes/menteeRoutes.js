@@ -630,6 +630,10 @@ router.post(
         },
         select: {
           capacity: true,
+          start_regis_date: true,
+          end_regis_date: true,
+          start_program_date: true,
+          end_program_date: true,
         },
       });
 
