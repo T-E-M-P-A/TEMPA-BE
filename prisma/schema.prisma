@@ -59,7 +59,7 @@ model campus {
   path_banner                       String?                    @db.Text
   address                           String?                    @db.VarChar(225)
   description                       String?                    @db.Text
-  vision_mission                    Json
+  vision_mission                    Json?
   email_campus                      String?                    @db.VarChar(225)
   website_campus                    String?                    @db.VarChar(225)
   province                          String?                    @db.VarChar(225)

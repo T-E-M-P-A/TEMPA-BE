@@ -50,7 +50,8 @@ export async function findOrCreateCampus(userData) {
         sub_google_id: googleSubId,
         // username: name,
         email: email,
-        verification_status: "accepted",
+        verification_status: "null",
+        // verification_status: "accepted",
       },
     });
 
