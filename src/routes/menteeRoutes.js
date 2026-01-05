@@ -139,6 +139,14 @@ router.get(
         },
       });
 
+      const responseAi = await prisma.recomendation_majors.findFirst({
+        where: {
+          id_mentee: menteeId,
+        },
+      });
+
+      // console.log(responseAi, interest);
+
       // Output always array
       const results = Array.isArray(menteeProgressWithProgram)
         ? menteeProgressWithProgram
@@ -201,7 +209,7 @@ router.get(
       return res.status(200).json({
         message: "Daftar program mentee berhasil diambil.",
         data: programs,
-        major_interest_status: !!interest,
+        major_interest_status: !interest && !!responseAi,
       });
     } catch (error) {
       console.error("Kesalahan saat mengambil data program mentee:", error);
