@@ -18,7 +18,6 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 // --- MIDDLEWARE ---
-app.use(helmet());
 
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000,
@@ -41,7 +40,7 @@ app.use(
 app.use(morgan("dev"));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
-app.use(cors({ origin: "http://localhost:5173" }));
+app.use(cors({ origin: "https://tempa.ddnsking.com" }));
 
 app.use("/public", express.static(path.join(process.cwd(), "uploads")));
 
