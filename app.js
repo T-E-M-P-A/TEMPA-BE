@@ -21,7 +21,10 @@ const __dirname = path.dirname(__filename);
 
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  limit: 100,
+  limit: (req, res) => {
+    if (req.user) return 1000;
+    return 100;
+  },
   standardHeaders: "draft-7",
   legacyHeaders: false,
   message: {
@@ -40,7 +43,7 @@ app.use(
 app.use(morgan("dev"));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
-app.use(cors({ origin: "https://tempa.ddnsking.com" }));
+app.use(cors({ origin: "http://localhost:5173" }));
 
 app.use("/public", express.static(path.join(process.cwd(), "uploads")));
 
