@@ -162,7 +162,13 @@ router.post("/login-campus", async (req, res) => {
       throw new Error("Invalid token payload.");
     }
 
-    const { name, sub, email } = payload;
+    const { name, sub, email, email_verified } = payload;
+
+    if (!email_verified) {
+      return res
+        .status(401)
+        .json({ error: "Email Google belum diverifikasi." });
+    }
 
     // get id user or add user
     const userRecord = await findOrCreateCampus(payload);
