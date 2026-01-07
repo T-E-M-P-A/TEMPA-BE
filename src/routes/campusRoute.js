@@ -669,7 +669,7 @@ router.get(
     const idProgram = req.params.id;
     const parsedIdProgram = parseInt(idProgram);
 
-    // Validasi ID Program
+    // validation id program
     if (isNaN(parsedIdProgram)) {
       return res.status(400).json({
         message: "ID Program tidak valid. Harus berupa angka.",
@@ -680,7 +680,9 @@ router.get(
       const getCampusSubscription = await prisma.campus_subscription.findFirst({
         where: {
           id_campus: idCampus,
-          id_package: 2,
+          id_package: {
+            in: [1, 2],
+          },
           expired_date: {
             gte: new Date(),
           },
@@ -690,9 +692,10 @@ router.get(
       const detailProgram = await prisma.program.findUnique({
         where: {
           id: parsedIdProgram,
-          id_campus: idCampus, // Verifikasi kepemilikan
+          id_campus: idCampus,
         },
         include: {
+          // get mentor where handle the program
           program_mentor: {
             where: {
               id_program: parsedIdProgram,
@@ -708,6 +711,7 @@ router.get(
               },
             },
           },
+          // get program major
           campus_program_id_majorTocampus: {
             include: {
               standard_major: {
@@ -718,14 +722,14 @@ router.get(
               },
             },
           },
-          // ✅ TAMBAHKAN MATERI PROGRAM
+          // get matery program
           materi: {
             select: {
               id: true,
               title: true,
               description: true,
               visibility: true,
-              // Anda bisa tambahkan materi_resource jika perlu detail file
+              // get resource matery
               materi_resource: {
                 select: {
                   type: true,
@@ -734,14 +738,13 @@ router.get(
               },
             },
           },
-          // ✅ TAMBAHKAN PROGRESS MENTEE (PESERTA)
+          // get mentee where register program
           mentee_progress: {
             select: {
               completion_status: true,
               final_score: true,
               create_at: true,
               mentee: {
-                // Relasi ke detail mentee
                 select: {
                   id: true,
                   username: true,
@@ -751,7 +754,7 @@ router.get(
               },
             },
           },
-          // ✅ TAMBAHKAN COUNT UNTUK TOTAL PESERTA TERDAFTAR
+          // total mentee where register program
           _count: {
             select: {
               mentee_progress: true,
@@ -839,21 +842,23 @@ router.get(
         }),
       }));
 
-      // BUAT OBJEK HASIL AKHIR
+      // formattedDetail
       const formattedDetail = {
         ...item,
         image_url: imageUrl,
-        seen: detailProgram.seen,
+        seen: !getCampusSubscription ? false : detailProgram.seen,
         major_name:
           item.campus_program_id_majorTocampus?.standard_major?.major_name ||
           null,
         registered_mentees: item._count?.mentee_progress || 0,
         // format data for mentee list
-        free_trial: getCampusSubscription ? false : true,
+        free_trial: getCampusSubscription ? true : false,
+        send_mail: getCampusSubscription?.id_package === 2 ? true : false,
         mentee_list: item.mentee_progress.map((mp) => ({
           id: mp.mentee?.id,
           username: mp.mentee?.username,
-          email: getCampusSubscription ? mp.mentee?.email : null,
+          email:
+            getCampusSubscription?.id_package === 2 ? mp.mentee?.email : null,
           gender: mp.mentee?.gender,
           completion_status: mp.completion_status,
           final_score: mp.final_score,
@@ -2254,23 +2259,24 @@ router.get(
       const checkSubscription = await prisma.campus_subscription.findFirst({
         where: {
           id_campus: idCampus,
-          id_package: 2,
+          id_package: {
+            in: [1, 2],
+          },
           expired_date: {
             gte: new Date(),
           },
         },
       });
 
-      if (checkSubscription) {
-        const updateBadge = await prisma.campus.update({
-          where: {
-            id: idCampus,
-          },
-          data: {
-            badge: true,
-          },
-        });
-      }
+      // Update badge status: true jika paket 2 aktif, false jika paket 1 atau tidak aktif
+      await prisma.campus.update({
+        where: {
+          id: idCampus,
+        },
+        data: {
+          badge: checkSubscription?.id_package === 2,
+        },
+      });
 
       const campusDetail = await prisma.campus.findUnique({
         where: {
@@ -2279,8 +2285,8 @@ router.get(
         select: {
           id: true,
           campus_name: true,
-          email: true, // Email login google
-          email_campus: true, // Email resmi kampus
+          email: true,
+          email_campus: true,
           path_logo: true,
           path_banner: true,
           address: true,
@@ -2313,6 +2319,10 @@ router.get(
 
       // Format URL untuk gambar
       const formattedData = { ...campusDetail };
+      if (!checkSubscription) {
+        formattedData.seen = false;
+      }
+
       formattedData.logo_url = formatPathToUrl(
         formattedData.path_logo,
         BASE_URL
@@ -2324,6 +2334,7 @@ router.get(
       delete formattedData.path_logo;
       delete formattedData.path_banner;
 
+      // console.log(formattedData);
       return res.status(200).json({
         message: "Detail kampus berhasil diambil.",
         data: formattedData,
@@ -3446,19 +3457,19 @@ router.get(
         });
       }
 
-      // 1. Total Kunjungan Profil (Campus Seen)
+      // get total profile visits
       const campusData = await prisma.campus.findUnique({
         where: { id: idCampus },
         select: { seen: true },
       });
 
-      // 2. Total Kunjungan Program (Program Seen Sum)
+      // get total program visits
       const programSeen = await prisma.program.aggregate({
         where: { id_campus: idCampus },
         _sum: { seen: true },
       });
 
-      // 3. Data Mentee Major Interest (Global)
+      // 3. get data mentee major interest (Global)
       const majorInterests = await prisma.standard_major.findMany({
         select: {
           id: true,
@@ -3481,7 +3492,7 @@ router.get(
         total_interest: m._count.mentee_major_interest,
       }));
 
-      // 4. Data City Mentee (Global)
+      // 4. get data city Mentee (Global)
       const cityDistribution = await prisma.mentee.groupBy({
         by: ["city"],
         _count: {
@@ -3504,7 +3515,7 @@ router.get(
         total: item._count.city,
       }));
 
-      // 5. Data Education Status Mentee (Global)
+      // get data education status mentee (Global)
       const educationStatusDistribution = await prisma.mentee.groupBy({
         by: ["education_status"],
         _count: {

@@ -84,7 +84,7 @@ router.post(
         payment_method_types: ["QRIS"],
       };
 
-      // 4. hash body
+      // hash body
       const bodyString = JSON.stringify(body);
       const digest = crypto
         .createHash("sha256")
@@ -124,19 +124,19 @@ router.post(
             },
           });
 
-        const PackageName = await prisma.subscription_package.findFirst({
-          where: {
-            id: getCampusSubscription.id_package,
-          },
-          select: {
-            package_name: true,
-          },
-        });
-
         // check if campus already have subscription
         if (getCampusSubscription) {
+          const PackageName = await prisma.subscription_package.findFirst({
+            where: {
+              id: getCampusSubscription.id_package,
+            },
+            select: {
+              package_name: true,
+            },
+          });
+
           return res.status(400).json({
-            message: `Anda sudah berlangganan untuk paket ${PackageName.package_name}`,
+            message: `Anda sudah berlangganan untuk paket ${PackageName?.package_name}`,
           });
         }
 
