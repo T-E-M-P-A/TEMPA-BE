@@ -21,7 +21,10 @@ const __dirname = path.dirname(__filename);
 
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  limit: 100,
+  limit: (req, res) => {
+    if (req.user) return 1000;
+    return 100;
+  },
   standardHeaders: "draft-7",
   legacyHeaders: false,
   message: {

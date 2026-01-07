@@ -18,7 +18,7 @@ router.post(
   authorizeRoles(["campus"]),
   async (req, res) => {
     try {
-      const idSubscription = parseInt(req.params.id); // Ini benar
+      const idSubscription = parseInt(req.params.id);
       const idCampus = req.user.id;
 
       const getSubscription = await prisma.subscription_package.findFirst({
@@ -65,15 +65,15 @@ router.post(
         });
       }
 
-      // 1. Ambil dari Dashboard DOKU Anda
+      // get doku key
       const clientId = CLIENT_ID_DOKU;
       const secretKey = SECRET_KEY;
 
-      // 2. Buat ID Unik & Waktu Sekarang
+      // create unique id & get time
       const requestId = crypto.randomUUID();
       const timestamp = new Date().toISOString().split(".")[0] + "Z";
 
-      // 3. Siapkan Body Order (Data apa yang dibeli)
+      // create body order
       const body = {
         order: {
           amount: Number(getSubscription.price),
@@ -84,14 +84,14 @@ router.post(
         payment_method_types: ["QRIS"],
       };
 
-      // 4. Hitung Digest (Hash dari Body)
+      // hash body
       const bodyString = JSON.stringify(body);
       const digest = crypto
         .createHash("sha256")
         .update(bodyString)
         .digest("base64");
 
-      // 5. Buat Raw Signature String (Aturan baku DOKU)
+      // create Raw Signature String (standard rules DOKU)
       const rawSignature =
         `Client-Id:${clientId}\n` +
         `Request-Id:${requestId}\n` +
@@ -99,7 +99,7 @@ router.post(
         `Request-Target:/checkout/v1/payment\n` + // Endpoint DOKU
         `Digest:${digest}`;
 
-      // 6. Buat HMAC-SHA256 Signature
+      // create HMAC-SHA256 Signature
       const signature = crypto
         .createHmac("sha256", secretKey)
         .update(rawSignature)
@@ -112,39 +112,54 @@ router.post(
       // });
 
       if (getSubscription.free_trial) {
-        // check if campus already have subscription
         const getCampusSubscription =
           await prisma.campus_subscription.findFirst({
             where: {
               id_campus: idCampus,
-              id_package: idSubscription,
+              // id_package: idSubscription,
+              status: "active",
+            },
+            select: {
+              id_package: true,
             },
           });
 
+        // check if campus already have subscription
         if (getCampusSubscription) {
+          const PackageName = await prisma.subscription_package.findFirst({
+            where: {
+              id: getCampusSubscription.id_package,
+            },
+            select: {
+              package_name: true,
+            },
+          });
+
           return res.status(400).json({
-            message: "Kampus sudah memiliki langganan ini",
+            message: `Anda sudah berlangganan untuk paket ${PackageName?.package_name}`,
           });
         }
 
-        await prisma.transaction.create({
-          data: {
-            transaction_date: new Date(),
-            doku_invoice_no: "INV-FREE-" + Date.now(),
-            payment_channel: "FREE_TRIAL",
-            status: "paid",
-            id_campus: idCampus,
-            transaction_no: "TRX-" + Date.now(),
-            id_package: idSubscription,
-            free_trial: true,
-            amount_original: getSubscription.price,
-            amount_final: 0,
-            duration_month: getSubscription.duration_month,
-            paid_at: new Date(),
-          },
-        });
+        // for free trial package subscription
+        if (!getCampusSubscription)
+          await prisma.transaction.create({
+            data: {
+              transaction_date: new Date(),
+              doku_invoice_no: "INV-FREE-" + Date.now(),
+              payment_channel: "FREE_TRIAL",
+              status: "paid",
+              id_campus: idCampus,
+              transaction_no: "TRX-" + Date.now(),
+              id_package: idSubscription,
+              free_trial: true,
+              amount_original: getSubscription.price,
+              amount_final: 0,
+              duration_month: getSubscription.duration_month,
+              paid_at: new Date(),
+            },
+          });
 
-        // Aktifkan langganan kampus secara langsung
+        // activate campus subscription
         const startDate = new Date();
         const expiredDate = new Date(startDate);
         expiredDate.setMonth(
@@ -153,7 +168,7 @@ router.post(
 
         await prisma.campus_subscription.create({
           data: {
-            doku_invoice: 0, // 0 untuk free trial karena tipe data Int
+            doku_invoice: 0,
             status: "active",
             id_campus: idCampus,
             id_package: idSubscription,
@@ -163,22 +178,20 @@ router.post(
           },
         });
 
-        // 8. Kirim URL pembayaran ke Frontend React
         return res.status(200).json({
           message: "Free trial berhasil diaktifkan",
-          isFree: true, // Flag untuk frontend
+          isFree: true, // Flag for frontend
         });
       } else {
-        // 7. Request ke DOKU (Menggunakan Axios)
+        // for paid subscription packages
         const dokuResponse = await axios.post(
           "https://api-sandbox.doku.com/checkout/v1/payment",
           body,
           {
-            timeout: 20000, // Naikkan ke 20 detik karena koneksi Anda tadi agak lambat
+            timeout: 20000,
             httpsAgent: new https.Agent({
               keepAlive: true,
               lookup: (hostname, options, callback) => {
-                // Custom lookup untuk memastikan DNS tidak macet
                 dns.lookup(hostname, options, callback);
               },
             }),
@@ -191,10 +204,9 @@ router.post(
           }
         );
 
-        // 8. Kirim URL pembayaran ke Frontend React
         return res.status(200).json({
           message: "Berhasil membuat payment intent",
-          paymentUrl: dokuResponse.data.response.payment.url, // INI YANG DIBUTUHKAN FRONTEND
+          paymentUrl: dokuResponse.data.response.payment.url, // send response result from hit api doku for frontend
         });
       }
     } catch (error) {
