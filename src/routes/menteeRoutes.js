@@ -9,13 +9,11 @@ import { GoogleGenAI } from "@google/genai";
 import formatPathToUrl from "../controllers/formatPathUrl.js";
 import generateContentWithRetry from "../controllers/generateContentWithRetry.js";
 
+const CLIENT_ID = process.env.CLIENT_ID;
+const BASE_URL = process.env.API_BASE_URL;
+const JWT_SECRET = process.env.JWT_SECRET;
 const client = new OAuth2Client(CLIENT_ID);
 const router = express.Router();
-
-const CLIENT_ID = process.env.CLIENT_ID;
-
-const JWT_SECRET = process.env.JWT_SECRET;
-const BASE_URL = process.env.API_BASE_URL;
 
 // Oauth mentee with google
 router.post("/login-mentee", async (req, res) => {
