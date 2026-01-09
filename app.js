@@ -10,6 +10,9 @@ import path from "path";
 import { fileURLToPath } from "url";
 import helmet from "helmet";
 import rateLimit from "express-rate-limit";
+import dns from "node:dns";
+
+dns.setDefaultResultOrder("ipv4first");
 
 const app = express();
 app.set("trust proxy", 1);
