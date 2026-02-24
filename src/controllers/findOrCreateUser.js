@@ -25,9 +25,9 @@ export async function findOrCreateUser(userData) {
       },
     });
 
-    console.log(`Akun baru dibuat dengan ID lokal: ${user.id}`);
+    // console.log(`Akun baru dibuat dengan ID lokal: ${user.id}`);
   } else {
-    console.log(`Pengguna ditemukan: ${user.email}. ID lokal: ${user.id}`);
+    // console.log(`Pengguna ditemukan: ${user.email}. ID lokal: ${user.id}`);
   }
 
   return user;
@@ -55,9 +55,9 @@ export async function findOrCreateCampus(userData) {
       },
     });
 
-    console.log(`Akun baru dibuat dengan ID lokal: ${user.id}`);
+    // console.log(`Akun baru dibuat dengan ID lokal: ${user.id}`);
   } else {
-    console.log(`Pengguna ditemukan: ${user.email}. ID lokal: ${user.id}`);
+    // console.log(`Pengguna ditemukan: ${user.email}. ID lokal: ${user.id}`);
   }
 
   return user;

@@ -1,82 +1,19 @@
 import express from "express";
-import { OAuth2Client } from "google-auth-library";
-import jwt from "jsonwebtoken";
 import { findOrCreateUser } from "../controllers/findOrCreateUser.js";
 import authenticateUser from "../middlewares/auth.js";
 import authorizeRoles from "../middlewares/roles.js";
 import prisma from "../../prisma/client.js";
-import { GoogleGenAI } from "@google/genai";
 import formatPathToUrl from "../controllers/formatPathUrl.js";
 import generateContentWithRetry from "../controllers/generateContentWithRetry.js";
+import * as menteeController from "../controllers/menteeController.js";
 
 const CLIENT_ID = process.env.CLIENT_ID;
 const BASE_URL = process.env.API_BASE_URL;
-const JWT_SECRET = process.env.JWT_SECRET;
-const client = new OAuth2Client(CLIENT_ID);
+
 const router = express.Router();
 
 // Oauth mentee with google
-router.post("/login-mentee", async (req, res) => {
-  const token = req.body.credential;
-
-  if (!token) {
-    return res.status(400).json({ error: "No credential token provided." });
-  }
-
-  try {
-    const ticket = await client.verifyIdToken({
-      idToken: token,
-      audience: CLIENT_ID,
-    });
-
-    const payload = ticket.getPayload();
-
-    if (!payload) {
-      throw new Error("Invalid token payload.");
-    }
-
-    const { name, sub, email, email_verified } = payload;
-
-    if (!email_verified) {
-      return res
-        .status(400)
-        .json({ error: "Email Google belum diverifikasi." });
-    }
-
-    // get id user or add user
-    const userRecord = await findOrCreateUser(payload);
-
-    // get user
-    const localUserId = userRecord.id;
-
-    const jwtPayload = {
-      id: localUserId, // id user
-      username: name,
-      email: email,
-      role: "mentee",
-    };
-
-    const signedJwtToken = jwt.sign(
-      jwtPayload,
-      JWT_SECRET,
-      { expiresIn: "1d" } // expired in 1 day
-    );
-
-    res.status(200).json({
-      message: "Login successful!",
-      data: {
-        token: signedJwtToken,
-        fullName: name,
-        uniqueId: localUserId,
-        email: email,
-        verify_status: userRecord.verify_status,
-      },
-    });
-  } catch (error) {
-    console.error("Token verification failed:", error.message);
-    res.status(401).json({ error: "Authentication failed. Invalid token." });
-  }
-});
+router.post("/login-mentee", menteeController.loginMentee);
 
 // get the program that the mentee has registered for
 router.get(
@@ -219,7 +156,7 @@ router.get(
       console.error("Kesalahan saat mengambil data program mentee:", error);
       return res.status(500).json({ message: "Internal server error." });
     }
-  }
+  },
 );
 
 // get all program
@@ -303,7 +240,7 @@ router.get(
         .status(500)
         .json({ msg: "Gagal mengambil data program", error: error.message });
     }
-  }
+  },
 );
 
 // get detail program
@@ -410,7 +347,7 @@ router.get(
         .status(404)
         .json({ message: "Not Found due to internal error." });
     }
-  }
+  },
 );
 
 // get all campus
@@ -475,7 +412,7 @@ router.get(
         .status(500)
         .json({ msg: "Gagal mengambil data program", error: error.message });
     }
-  }
+  },
 );
 
 // get detail campus
@@ -553,14 +490,14 @@ router.get(
       // delete old path_logo and add new url logo_url
       formattedCampus.logo_url = formatPathToUrl(
         formattedCampus.path_logo,
-        BASE_URL
+        BASE_URL,
       );
       delete formattedCampus.path_logo;
 
       // delete old path_banner and add new url banner_url
       formattedCampus.banner_url = formatPathToUrl(
         formattedCampus.path_banner,
-        BASE_URL
+        BASE_URL,
       );
       delete formattedCampus.path_banner;
 
@@ -574,7 +511,7 @@ router.get(
             // Format path_gambar program dan hapus path lama
             formattedProgram.image_url = formatPathToUrl(
               formattedProgram.path_gambar,
-              BASE_URL
+              BASE_URL,
             );
             delete formattedProgram.path_gambar;
 
@@ -594,7 +531,7 @@ router.get(
         .status(404)
         .json({ message: "Not Found due to internal error." });
     }
-  }
+  },
 );
 
 // register program for mentee
@@ -627,7 +564,7 @@ router.post(
       // if already register program
       if (existingEnrollment) {
         console.log(
-          `Mentee ID ${idMentee} sudah terdaftar di Program ID ${idProgramInt}. Pendaftaran dibatalkan`
+          `Mentee ID ${idMentee} sudah terdaftar di Program ID ${idProgramInt}. Pendaftaran dibatalkan`,
         );
         return res.status(409).json({
           message: `Anda sudah mendaftar program tersebut!`,
@@ -711,7 +648,7 @@ router.post(
         error: error.message,
       });
     }
-  }
+  },
 );
 
 // get majors
@@ -746,7 +683,7 @@ router.get(
         .status(500)
         .json({ message: "Not Found due to internal error." });
     }
-  }
+  },
 );
 
 // get detail majors
@@ -814,7 +751,7 @@ router.get(
           // Format Banner Kampus
           const campusBannerUrl = formatPathToUrl(
             m.campus?.path_banner,
-            BASE_URL
+            BASE_URL,
           );
 
           // Format Gambar Program
@@ -822,12 +759,12 @@ router.get(
             (prog) => {
               const programImageUrl = formatPathToUrl(
                 prog.path_gambar,
-                BASE_URL
+                BASE_URL,
               );
               const newProg = { ...prog, image_url: programImageUrl };
               delete newProg.path_gambar;
               return newProg;
-            }
+            },
           );
 
           const newMajor = {
@@ -860,7 +797,7 @@ router.get(
         error: error,
       });
     }
-  }
+  },
 );
 
 // recomendation majors
@@ -919,7 +856,7 @@ router.post(
         return res.status(400).json({
           message: "Validasi Gagal: Semua pertanyaan wajib diisi.",
           details: `Pertanyaan yang belum terjawab: ${missingFields.join(
-            ", "
+            ", ",
           )}`,
           missingFields: missingFields,
         });
@@ -985,7 +922,7 @@ router.post(
       const response = await generateContentWithRetry(
         modelConfig,
         userProfile,
-        systemInstruction
+        systemInstruction,
       );
 
       const aiRecommendations = JSON.parse(response.text);
@@ -1021,7 +958,7 @@ router.post(
         error: error.message,
       });
     }
-  }
+  },
 );
 
 // get response ai from databse if mentee already assign form
@@ -1060,7 +997,7 @@ router.get(
         error: error.message,
       });
     }
-  }
+  },
 );
 
 // get materi mentee
@@ -1207,7 +1144,7 @@ router.get(
         error: error.message,
       });
     }
-  }
+  },
 );
 
 // give feedback to program
@@ -1287,7 +1224,7 @@ router.post(
         error: error.message,
       });
     }
-  }
+  },
 );
 
 // verify mentee
@@ -1370,7 +1307,7 @@ router.put(
         error: error.message,
       });
     }
-  }
+  },
 );
 
 // check verif account
@@ -1402,7 +1339,7 @@ router.get(
         error: error.message,
       });
     }
-  }
+  },
 );
 
 // get mentee profile data
@@ -1442,7 +1379,7 @@ router.get(
         error: error.message,
       });
     }
-  }
+  },
 );
 
 // edit mentee profile
@@ -1515,7 +1452,7 @@ router.put(
         error: error.message,
       });
     }
-  }
+  },
 );
 
 // save mentee major interest
@@ -1571,7 +1508,7 @@ router.post(
         error: error.message,
       });
     }
-  }
+  },
 );
 
 // get mentee major interest
@@ -1610,7 +1547,7 @@ router.get(
         error: error.message,
       });
     }
-  }
+  },
 );
 
 // add seen every mentee see detail program
@@ -1665,7 +1602,7 @@ router.post(
         error: error.message,
       });
     }
-  }
+  },
 );
 
 // add seen every mentee see detail campus
@@ -1719,7 +1656,7 @@ router.post(
         error: error.message,
       });
     }
-  }
+  },
 );
 
 // test midleware
@@ -1739,7 +1676,7 @@ router.post(
         message: error,
       });
     }
-  }
+  },
 );
 
 export default router;
