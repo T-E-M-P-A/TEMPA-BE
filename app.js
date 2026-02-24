@@ -40,13 +40,18 @@ app.use(limiter);
 app.use(
   helmet({
     crossOriginResourcePolicy: { policy: "cross-origin" },
-  })
+  }),
 );
 
 app.use(morgan("dev"));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
-app.use(cors({ origin: "https://tempa.ddnsking.com" }));
+app.use(
+  cors({
+    origin: "http://localhost:5173",
+    // "https://tempa.ddnsking.com"
+  }),
+);
 
 app.use("/public", express.static(path.join(process.cwd(), "uploads")));
 
