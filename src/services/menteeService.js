@@ -4,6 +4,8 @@ import { OAuth2Client } from "google-auth-library";
 import jwt from "jsonwebtoken";
 import prisma from "../../prisma/client.js";
 import formatPathToUrl from "../controllers/formatPathUrl.js";
+import generateContentWithRetry from "../controllers/generateContentWithRetry.js";
+import { AppError } from "../utils/customError.js";
 const client = new OAuth2Client(process.env.CLIENT_ID);
 const JWT_SECRET = process.env.JWT_SECRET;
 const BASE_URL = process.env.API_BASE_URL;
@@ -694,4 +696,146 @@ export const detailMajor = async (majorName) => {
     message: "Detail jurusan berhasil diambil",
     data: formattedDetailMajor,
   };
+};
+
+// recomendation majors
+export const recomendationMajors = async (menteeId, reqBody) => {
+  const { q1, q2, q3, q4, q5, q6, q7, q8, q9, q10 } = reqBody;
+
+  const checkResponse = await prisma.recomendation_majors.findFirst({
+    where: {
+      id_mentee: menteeId,
+    },
+  });
+
+  // check if mentee already assign form
+  if (checkResponse) {
+    throw new AppError(
+      "Akses Ditolak. Anda hanya diizinkan mengisi tes jurusan satu kali!",
+      403,
+    );
+  }
+
+  const requiredFields = [
+    { key: "q1", name: "Minat Akademik Inti" },
+    { key: "q2", name: "Aktivitas Pilihan" },
+    { key: "q3", name: "Motivasi Karir" },
+    { key: "q4", name: "Preferensi Lingkungan Kerja" },
+    { key: "q5", name: "Kekuatan Diri" },
+    { key: "q6", name: "Tantangan yang Disukai" },
+    { key: "q7", name: "Toleransi Risiko & Aturan" },
+    { key: "q8", name: "Pentingnya Gaji (Skala 1-5)" },
+    { key: "q9", name: "Jurusan yang Sudah Ada di Pikiran" },
+    { key: "q10", name: "Data Kuantitatif/Kualitatif" },
+  ];
+
+  const missingFields = [];
+
+  requiredFields.forEach((field) => {
+    const value = reqBody[field.key];
+
+    // if null, undefined, or string null
+    if (
+      value === null ||
+      value === undefined ||
+      (typeof value === "string" && value.trim() === "")
+    ) {
+      missingFields.push(field.name);
+    }
+  });
+
+  if (missingFields.length > 0) {
+    throw new AppError("Validasi Gagal: Semua pertanyaan wajib diisi.", 400);
+  }
+
+  // get all data majors for ai
+  const majors = await prisma.standard_major.findMany({
+    select: {
+      major_name: true,
+    },
+  });
+
+  // conversion result from majors to string/array for AI
+  const availableMajors = majors.map((m) => m.major_name).join(", ");
+
+  // Buat prompt
+  const userProfile = `
+        [1] Minat Akademik Inti: ${q1}
+        [2] Aktivitas Pilihan: ${q2}
+        [3] Motivasi Karir: ${q3}
+        [4] Preferensi Lingkungan Kerja: ${q4}
+        [5] Kekuatan Diri: ${q5}
+        [6] Tantangan yang Disukai: ${q6}
+        [7] Toleransi Risiko & Aturan: ${q7}
+        [8] Pentingnya Gaji (Skala 1-5): ${q8}
+        [9] Jurusan yang Sudah Ada di Pikiran: ${q9}
+        [10] Data Kuantitatif/Kualitatif: ${q10}
+      `;
+
+  const systemInstruction = `Anda adalah Konselor Karir Ahli di Indonesia. Tugas Anda adalah menganalisis profil pengguna berikut dan merekomendasikan 2 hingga 3 jurusan kuliah yang paling sesuai.
+
+        Anda harus membatasi rekomendasi hanya pada jurusan yang tersedia dalam daftar berikut: ${availableMajors}.
+
+        Berikan keluaran Anda dalam format JSON array of objects dengan struktur ini:
+        [
+          {
+            "jurusan": "Nama Jurusan (HARUS ada di daftar yang tersedia)",
+            "kesesuaian": "Penjelasan ringkas (1-2 kalimat) mengapa jurusan ini cocok dengan profil pengguna.",
+            "profesi_relevan": ["Profesi A", "Profesi B"]
+          },
+          // ... objek kedua
+          // ... objek ketiga (opsional)
+        ]
+        `;
+
+  // config for respons JSON
+  const modelConfig = {
+    responseMimeType: "application/json",
+    responseSchema: {
+      type: "ARRAY",
+      items: {
+        type: "OBJECT",
+        properties: {
+          jurusan: { type: "STRING" },
+          kesesuaian: { type: "STRING" },
+          profesi_relevan: { type: "ARRAY", items: { type: "STRING" } },
+        },
+      },
+    },
+  };
+
+  try {
+    // get eai
+    const response = await generateContentWithRetry(
+      modelConfig,
+      userProfile,
+      systemInstruction,
+    );
+
+    const aiRecommendations = JSON.parse(response.text);
+
+    // save response to database
+    const saveResponseAi = await prisma.recomendation_majors.create({
+      data: {
+        response_ai: aiRecommendations,
+        id_mentee: menteeId,
+      },
+    });
+
+    // console.log("Rekomendasi AI:", aiRecommendations);
+
+    return {
+      message: "Rekomendasi jurusan berhasil dibuat.",
+      data: aiRecommendations,
+    };
+  } catch (error) {
+    console.error("Kesalahan AI Service:", error);
+
+    let message = "Terjadi kesalahan internal saat memproses rekomendasi.";
+    if (error.message.includes("Gagal mendapatkan rekomendasi AI")) {
+      message = error.message; // Pesan dari fungsi retry kamu
+    }
+
+    throw new AppError(message, 500);
+  }
 };
