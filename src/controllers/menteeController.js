@@ -231,3 +231,18 @@ export const verifyMentee = async (req, res, next) => {
     next(error);
   }
 };
+
+// check verify account
+export const checkVerifyStatus = async (req, res, next) => {
+  try {
+    const menteeId = req.user.id;
+
+    const result = await menteeService.checkVerifyAccount(menteeId);
+    res.status(200).json({
+      message: result.message,
+      data: result.data,
+    });
+  } catch (error) {
+    next(error);
+  }
+};

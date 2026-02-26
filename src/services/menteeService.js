@@ -1092,3 +1092,20 @@ export const verifyMentee = async (menteeId, reqBody) => {
     data: updatedMentee,
   };
 };
+
+// check verift account
+export const checkVerifyAccount = async (menteeId) => {
+  const mentee = await prisma.mentee.findUnique({
+    where: {
+      id: menteeId,
+    },
+    select: {
+      verify_status: true,
+    },
+  });
+
+  return {
+    message: "Status verifikasi berhasil diambil.",
+    data: mentee,
+  };
+};
