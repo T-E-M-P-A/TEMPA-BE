@@ -92,38 +92,7 @@ router.get(
   "/mentee/get-response",
   authenticateUser,
   authorizeRoles(["mentee"]),
-  async (req, res) => {
-    try {
-      const menteeId = req.user.id;
-
-      const getResponse = await prisma.recomendation_majors.findFirst({
-        where: {
-          id_mentee: menteeId,
-        },
-        select: {
-          response_ai: true,
-        },
-      });
-
-      console.log(getResponse);
-
-      if (!getResponse) {
-        return res.status(404).json({
-          message: "Anda belum mengisi form",
-        });
-      }
-
-      return res.status(200).json({
-        message: "get response berhasil",
-        data: getResponse,
-      });
-    } catch (error) {
-      return res.status(500).json({
-        message: "Server sedang bermasalahan",
-        error: error.message,
-      });
-    }
-  },
+  menteeController.getResponseAi,
 );
 
 // get materi mentee

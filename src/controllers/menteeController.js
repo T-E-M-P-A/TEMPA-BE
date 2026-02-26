@@ -162,3 +162,19 @@ export const recomendationMajors = async (req, res, next) => {
     next(error);
   }
 };
+
+// get response ai from databse if mentee already assign form
+export const getResponseAi = async (req, res, next) => {
+  try {
+    const menteeId = req.user.id;
+
+    const result = await menteeService.getResponseAi(menteeId);
+
+    res.status(200).json({
+      message: result.message,
+      data: result.data,
+    });
+  } catch (error) {
+    next(error);
+  }
+};

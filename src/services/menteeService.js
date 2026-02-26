@@ -6,6 +6,7 @@ import prisma from "../../prisma/client.js";
 import formatPathToUrl from "../controllers/formatPathUrl.js";
 import generateContentWithRetry from "../controllers/generateContentWithRetry.js";
 import { AppError } from "../utils/customError.js";
+
 const client = new OAuth2Client(process.env.CLIENT_ID);
 const JWT_SECRET = process.env.JWT_SECRET;
 const BASE_URL = process.env.API_BASE_URL;
@@ -821,4 +822,27 @@ export const recomendationMajors = async (menteeId, reqBody) => {
 
     throw new AppError(message, 500);
   }
+};
+
+// get response ai from databse if mentee already assign form
+export const getResponseAi = async (menteeId) => {
+  const getResponse = await prisma.recomendation_majors.findFirst({
+    where: {
+      id_mentee: menteeId,
+    },
+    select: {
+      response_ai: true,
+    },
+  });
+
+  // console.log(getResponse);
+
+  if (!getResponse) {
+    throw new AppError("Anda belum mengisi form", 404);
+  }
+
+  return {
+    message: "get response berhasil",
+    data: getResponse,
+  };
 };
