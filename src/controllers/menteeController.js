@@ -55,3 +55,18 @@ export const getAllProgram = async (req, res, next) => {
     next(error);
   }
 };
+
+// get detail program
+export const detailProgram = async (req, res, next) => {
+  try {
+    const idProgram = req.params.id;
+    const result = await menteeService.detailProgram(idProgram);
+
+    res.status(200).json({
+      message: result.message,
+      data: result.data,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
