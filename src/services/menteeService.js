@@ -236,6 +236,7 @@ export const getAllProgram = async () => {
   };
 };
 
+// get detail program
 export const detailProgram = async (idProgram) => {
   const detailProgram = await prisma.program.findUnique({
     where: {
@@ -323,5 +324,58 @@ export const detailProgram = async (idProgram) => {
   return {
     message: "Detail program ditemukan",
     data: formatGetDetailProgram,
+  };
+};
+
+// get all campus
+export const getCampus = async () => {
+  const getAllCampus = await prisma.campus.findMany({
+    where: {
+      verification_status: "accepted",
+    },
+    select: {
+      id: true,
+      campus_name: true,
+      address: true,
+      path_logo: true,
+      path_banner: true,
+      province: true,
+      city: true,
+      badge: true,
+    },
+  });
+
+  if (!getAllCampus) {
+    return "Data tidak ditemukan";
+  }
+
+  const formatGetAllCampus = getAllCampus.map((item) => {
+    // get raw path
+    const rawLogo = item.path_logo;
+    const rawBanner = item.path_banner;
+
+    // format using function formatPathToUrl
+    const logoUrl = formatPathToUrl(rawLogo, BASE_URL);
+    const bannerUrl = formatPathToUrl(rawBanner, BASE_URL);
+
+    // copy all data object
+    const newItem = { ...item };
+
+    // delete old path before format
+    delete newItem.path_logo;
+    delete newItem.path_banner;
+
+    // add new path format to the object
+    newItem.logo_url = logoUrl;
+    newItem.banner_url = bannerUrl;
+
+    return newItem;
+  });
+
+  // console.log(formatGetAllCampus);
+
+  return {
+    message: "Data campus ditemukan",
+    data: formatGetAllCampus,
   };
 };

@@ -70,3 +70,17 @@ export const detailProgram = async (req, res, next) => {
     next(error);
   }
 };
+
+// get all campus
+export const getAllCampus = async (req, res, next) => {
+  try {
+    const result = await menteeService.getCampus();
+
+    res.status(200).json({
+      message: result.message,
+      data: result.data,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
