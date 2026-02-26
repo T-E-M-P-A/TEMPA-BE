@@ -18,7 +18,7 @@ export const authenticateGoogleUser = async (idToken) => {
   });
 
   const payload = ticket.getPayload();
-  if (!payload) throw new Error("Invalid token payload.");
+  if (!payload) throw new AppError("Invalid token payload.", 400);
 
   const { name, email, email_verified } = payload;
 
@@ -113,7 +113,7 @@ export const getProgramMentee = async (menteeId) => {
 
   // if program null
   if (results.length === 0) {
-    return "Mentee belum terdaftar di program manapun.";
+    throw new AppError("Mentee belum terdaftar di program manapun.", 404);
   }
 
   const programs = menteeProgressWithProgram.map((item) => {
@@ -276,8 +276,7 @@ export const detailProgram = async (idProgram) => {
   });
 
   if (!detailProgram) {
-    // Tangani kasus 404 jika program tidak ditemukan
-    return "Program tidak ditemukan.";
+    throw new AppError("Program tidak ditemukan", 404);
   }
 
   const item = detailProgram;
@@ -348,7 +347,7 @@ export const getCampus = async () => {
   });
 
   if (!getAllCampus) {
-    return "Data tidak ditemukan";
+    throw new AppError("Kampus tidak ditemukan", 404);
   }
 
   const formatGetAllCampus = getAllCampus.map((item) => {
@@ -442,7 +441,7 @@ export const detailCampus = async (idCampus) => {
   });
 
   if (!detailCampus) {
-    return "Kampus tidak ditemukan.";
+    throw new AppError("Kampus tidak ditemukan", 404);
   }
 
   let formattedCampus = { ...detailCampus };
@@ -461,7 +460,7 @@ export const detailCampus = async (idCampus) => {
   );
   delete formattedCampus.path_banner;
 
-  // 🏆 3. FORMAT PATH GAMBAR DI DALAM RELASI PROGRAM (jika ada)
+  // FORMAT PATH GAMBAR DI DALAM RELASI PROGRAM (jika ada)
   if (formattedCampus.program_program_id_campusTocampus) {
     formattedCampus.program_program_id_campusTocampus =
       formattedCampus.program_program_id_campusTocampus.map((program) => {
@@ -490,9 +489,7 @@ export const detailCampus = async (idCampus) => {
 // register mentee program
 export const registerProgram = async (idMentee, idProgramInt) => {
   if (!idProgramInt || !idMentee) {
-    return {
-      message: "ID Program atau ID Mentee tidak ditemukan.",
-    };
+    throw new AppError("ID Program atau ID Mentee tidak ditemukan.", 404);
   }
 
   // check if mentee is already register to program
@@ -505,10 +502,7 @@ export const registerProgram = async (idMentee, idProgramInt) => {
 
   // if already register program
   if (existingEnrollment) {
-    return {
-      message: `Anda sudah mendaftar program tersebut!`,
-      data: existingEnrollment,
-    };
+    throw new AppError("Anda sudah mendaftar program tersebut!", 400);
   }
 
   // Check program status and capacity
@@ -526,31 +520,23 @@ export const registerProgram = async (idMentee, idProgramInt) => {
   });
 
   if (!programData) {
-    return { message: "Program tidak ditemukan." };
+    throw new AppError("Program tidak ditemukan.", 404);
   }
 
   if (new Date(programData.start_regis_date) > new Date()) {
-    return {
-      message: "Pendaftaran belum dibuka!",
-    };
+    throw new AppError("Pendaftaran belum dibuka!", 400);
   }
 
   if (new Date(programData.end_regis_date) < new Date()) {
-    return {
-      message: "Pendaftaran sudah tutup!",
-    };
+    throw new AppError("Pendaftaran sudah tutup!", 400);
   }
 
   if (new Date(programData.end_program_date) < new Date()) {
-    return {
-      message: "Program sudah tutup/selesai!",
-    };
+    throw new AppError("Program sudah tutup!", 400);
   }
 
   if (programData.capacity <= 0) {
-    return {
-      message: "Kuota program sudah penuh!",
-    };
+    throw new AppError("Kuota program sudah penuh!", 400);
   }
 
   // Register program and decrement capacity
@@ -587,7 +573,7 @@ export const getMajors = async () => {
   const allMajors = await prisma.standard_major.findMany({});
 
   if (!allMajors) {
-    return { message: "Data Jurusan tidak ada." };
+    throw new AppError("Jurusan tidak ditemukan", 404);
   }
 
   const formattedMajors = allMajors.map((major) => {
@@ -647,12 +633,9 @@ export const detailMajor = async (majorName) => {
     },
   });
 
-  // Cek jika jurusan tidak ditemukan
+  // check if major is not found
   if (!detailMajor) {
-    return {
-      message: "Jurusan tidak ditemukan",
-      data: null,
-    };
+    throw new AppError("Jurusan tidak ditemukan", 404);
   }
 
   // Format data untuk menyertakan URL gambar yang valid
