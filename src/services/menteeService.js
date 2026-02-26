@@ -2,9 +2,12 @@ import { findOrCreateUser } from "../controllers/findOrCreateUser.js"; // Sesuai
 import { GoogleGenAI } from "@google/genai";
 import { OAuth2Client } from "google-auth-library";
 import jwt from "jsonwebtoken";
+import prisma from "../../prisma/client.js";
 const client = new OAuth2Client(process.env.CLIENT_ID);
 const JWT_SECRET = process.env.JWT_SECRET;
+const BASE_URL = process.env.API_BASE_URL;
 
+// Oauth mentee
 export const authenticateGoogleUser = async (idToken) => {
   const ticket = await client.verifyIdToken({
     idToken,
@@ -41,5 +44,123 @@ export const authenticateGoogleUser = async (idToken) => {
     localUserId: userRecord.id,
     email,
     userRecord,
+  };
+};
+
+// get the program that the mentee has registered for
+export const getProgramMentee = async (menteeId) => {
+  const menteeProgressWithProgram = await prisma.mentee_progress.findMany({
+    where: {
+      id_mentee: menteeId,
+    },
+    select: {
+      id: true,
+      completion_status: true,
+      final_score: true,
+
+      // get program by id from table program
+      program: {
+        select: {
+          id: true,
+          program_name: true,
+          description: true,
+          start_program_date: true,
+          end_program_date: true,
+          capacity: true,
+          path_gambar: true,
+          onsiteLocationName: true,
+          type_sesi: true,
+
+          // get major program
+          campus_program_id_majorTocampus: {
+            select: {
+              id: true,
+
+              // get major name
+              standard_major: {
+                select: {
+                  major_name: true,
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+  });
+
+  const interest = await prisma.mentee_major_interest.findFirst({
+    where: {
+      id_mentee: menteeId,
+    },
+  });
+
+  const responseAi = await prisma.recomendation_majors.findFirst({
+    where: {
+      id_mentee: menteeId,
+    },
+  });
+
+  // console.log(responseAi, interest);
+
+  // Output always array
+  const results = Array.isArray(menteeProgressWithProgram)
+    ? menteeProgressWithProgram
+    : [];
+
+  // if program null
+  if (results.length === 0) {
+    return "Mentee belum terdaftar di program manapun.";
+  }
+
+  const programs = menteeProgressWithProgram.map((item) => {
+    // --- Langkah 1: Logika Pembersihan Path (DIPINDAHKAN KE DALAM) ---
+    const rawPath = item.program.path_gambar;
+    let finalPath = rawPath;
+
+    if (finalPath) {
+      // 1. Bersihkan slash di depan jika ada (Dari '/uploads/...')
+      if (finalPath.startsWith("/")) {
+        finalPath = finalPath.substring(1);
+      }
+
+      // 2. POTONG string "uploads/" di awal path (Karena Express sudah memetakan folder 'uploads')
+      if (finalPath.startsWith("uploads/")) {
+        finalPath = finalPath.substring("uploads/".length);
+      }
+    }
+
+    return {
+      progress_id: item.id,
+      completion_status: item.completion_status,
+      final_score: item.final_score,
+      // major_interest_status: !!interest,
+
+      program_details: {
+        id: item.program.id,
+        program_name: item.program.program_name,
+        description: item.program.description,
+        start_date: item.program.start_program_date,
+        end_date: item.program.end_program_date,
+        capacity: item.program.capacity,
+        onsiteLocationName: item.program.onsiteLocationName,
+        type_sesi: item.program.type_sesi,
+
+        // KOREKSI: Gunakan finalPath yang sudah dipotong dan dibersihkan
+        image_url: finalPath ? `${BASE_URL}/public/${finalPath}` : null,
+
+        // Gabungkan data relasi
+        sesi_program: item.program.sesi_program,
+        major_name:
+          item.program.campus_program_id_majorTocampus.standard_major
+            .major_name,
+      },
+    };
+  });
+
+  return {
+    message: "Daftar program mentee berhasil diambil.",
+    data: programs,
+    major_interest_status: !interest && !!responseAi,
   };
 };

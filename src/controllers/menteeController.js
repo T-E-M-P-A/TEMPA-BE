@@ -1,5 +1,6 @@
 import * as menteeService from "../services/menteeService.js";
 
+// login oauth mentee
 export const loginMentee = async (req, res, next) => {
   try {
     const token = req.body.credential;
@@ -19,6 +20,22 @@ export const loginMentee = async (req, res, next) => {
         email: user.email,
         verify_status: user.userRecord.verify_status,
       },
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// get the program that the mentee has registered for
+export const getProgramMentee = async (req, res, next) => {
+  try {
+    const menteeId = req.user.id;
+    const result = await menteeService.getProgramMentee(menteeId);
+
+    res.status(200).json({
+      message: result.message,
+      data: result.data,
+      major_interest_status: result.major_interest_status,
     });
   } catch (error) {
     next(error);
