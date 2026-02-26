@@ -178,3 +178,20 @@ export const getResponseAi = async (req, res, next) => {
     next(error);
   }
 };
+
+// get materi
+export const getMateri = async (req, res, next) => {
+  try {
+    const idProgram = parseInt(req.params.id_program);
+    const idMentee = parseInt(req.user.id);
+
+    const result = await menteeService.getMateri(idProgram, idMentee);
+
+    res.status(200).json({
+      message: result.message,
+      data: result.data,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
