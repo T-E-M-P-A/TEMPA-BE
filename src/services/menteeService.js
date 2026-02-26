@@ -602,3 +602,96 @@ export const getMajors = async () => {
     data: formattedMajors,
   };
 };
+
+// get detail major
+export const detailMajor = async (majorName) => {
+  const detailMajor = await prisma.standard_major.findFirst({
+    where: {
+      major_name: majorName,
+    },
+    include: {
+      major: {
+        include: {
+          campus: {
+            select: {
+              id: true,
+              campus_name: true,
+              path_banner: true,
+            },
+          },
+          program_program_id_majorTocampus: {
+            include: {
+              campus_program_id_majorTocampus: {
+                include: {
+                  standard_major: {
+                    select: {
+                      id: true,
+                      major_name: true,
+                      logo_name: true,
+                      path_banner: true,
+                    },
+                  },
+                  campus: {
+                    select: {
+                      campus_name: true,
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+  });
+
+  // Cek jika jurusan tidak ditemukan
+  if (!detailMajor) {
+    return {
+      message: "Jurusan tidak ditemukan",
+      data: null,
+    };
+  }
+
+  // Format data untuk menyertakan URL gambar yang valid
+  const formattedDetailMajor = {
+    ...detailMajor,
+    banner_url: formatPathToUrl(detailMajor.path_banner, BASE_URL),
+    campus: detailMajor.major.map((m) => {
+      // Format Banner Kampus
+      const campusBannerUrl = formatPathToUrl(m.campus?.path_banner, BASE_URL);
+
+      // Format Gambar Program
+      const formattedPrograms = m.program_program_id_majorTocampus.map(
+        (prog) => {
+          const programImageUrl = formatPathToUrl(prog.path_gambar, BASE_URL);
+          const newProg = { ...prog, image_url: programImageUrl };
+          delete newProg.path_gambar;
+          return newProg;
+        },
+      );
+
+      const newMajor = {
+        ...m,
+        campus: {
+          ...m.campus,
+          banner_url: campusBannerUrl,
+        },
+        program_program_id_majorTocampus: formattedPrograms,
+      };
+
+      if (newMajor.campus) {
+        delete newMajor.campus.path_banner;
+      }
+
+      return newMajor;
+    }),
+  };
+
+  delete formattedDetailMajor.path_banner;
+
+  return {
+    message: "Detail jurusan berhasil diambil",
+    data: formattedDetailMajor,
+  };
+};

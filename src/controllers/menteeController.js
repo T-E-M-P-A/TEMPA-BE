@@ -131,3 +131,18 @@ export const getMajors = async (req, res, next) => {
     next(error);
   }
 };
+
+// get detail major
+export const detailMajor = async (req, res, next) => {
+  try {
+    const { majorName } = req.params;
+    const result = await menteeService.detailMajor(majorName);
+
+    res.status(200).json({
+      message: result.message,
+      data: result.data,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
