@@ -216,3 +216,18 @@ export const giveFeedbackProgram = async (req, res, next) => {
     next(error);
   }
 };
+
+// verify mentee
+export const verifyMentee = async (req, res, next) => {
+  try {
+    const menteeId = req.user.id;
+    const result = await menteeService.verifyMentee(menteeId, req.body);
+
+    res.status(200).json({
+      message: result.message,
+      data: result.data,
+    });
+  } catch (error) {
+    next(error);
+  }
+};

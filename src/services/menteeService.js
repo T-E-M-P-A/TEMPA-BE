@@ -1,5 +1,4 @@
-import { findOrCreateUser } from "../controllers/findOrCreateUser.js"; // Sesuaikan path
-import { GoogleGenAI } from "@google/genai";
+import { findOrCreateUser } from "../controllers/findOrCreateUser.js";
 import { OAuth2Client } from "google-auth-library";
 import jwt from "jsonwebtoken";
 import prisma from "../../prisma/client.js";
@@ -1029,5 +1028,67 @@ export const giveFeedbackProgram = async (idProgram, idMentee, reqBody) => {
   return {
     message: "Feedback berhasil dikirim.",
     data: newFeedback,
+  };
+};
+
+// verify mentee
+export const verifyMentee = async (menteeId, reqBody) => {
+  const {
+    fullName,
+    email,
+    gender,
+    educationStatus,
+    valueProvince,
+    valueCity,
+    valueSubdistrict,
+    valueWard,
+    dob,
+    terms,
+    consent,
+  } = reqBody;
+
+  // console.log(req.body);
+
+  if (!terms || !consent) {
+    throw new AppError("Anda harus menyetujui syarat dan ketentuan.", 400);
+  }
+
+  // Mapping gender
+  let genderEnum = null;
+  if (gender === "Laki-laki") {
+    genderEnum = "Male";
+  } else if (gender === "Perempuan") {
+    genderEnum = "Female";
+  }
+
+  // Mapping education status
+  const educationStatusMap = {
+    0: "Siswa_Aktif__SMA_SMK_Sederajat_",
+    1: "Lulusan_Baru___Gap_Year__Belum_Kuliah_",
+    2: "Mahasiswa_Aktif",
+    3: "Lainnya",
+  };
+
+  const updatedMentee = await prisma.mentee.update({
+    where: {
+      id: menteeId,
+    },
+    data: {
+      username: fullName,
+      email: email,
+      gender: genderEnum,
+      date_of_birth: dob ? new Date(dob) : null,
+      province: valueProvince,
+      city: valueCity,
+      subdistrict: valueSubdistrict,
+      ward: valueWard,
+      education_status: educationStatusMap[educationStatus] || null,
+      verify_status: true,
+    },
+  });
+
+  return {
+    message: "Data profil berhasil diperbarui.",
+    data: updatedMentee,
   };
 };
