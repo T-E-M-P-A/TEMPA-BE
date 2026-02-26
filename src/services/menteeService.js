@@ -379,3 +379,108 @@ export const getCampus = async () => {
     data: formatGetAllCampus,
   };
 };
+
+// get detail campus
+export const detailCampus = async (idCampus) => {
+  const detailCampus = await prisma.campus.findUnique({
+    where: {
+      id: parseInt(idCampus),
+    },
+    select: {
+      id: true,
+      campus_name: true,
+      email: true,
+      path_logo: true,
+      path_banner: true,
+      province: true,
+      city: true,
+      subdistrict: true,
+      ward: true,
+      lat: true,
+      lng: true,
+      description: true,
+      verification_status: false,
+      sub_google_id: false,
+      vision_mission: true,
+      badge: true,
+
+      program_program_id_campusTocampus: {
+        where: {
+          visibility: "public",
+        },
+        select: {
+          id: true,
+          program_name: true,
+          path_gambar: true,
+          description: true,
+          capacity: true,
+          type_sesi: true,
+          start_regis_date: true,
+          end_regis_date: true,
+          start_program_date: true,
+          end_program_date: true,
+          onsiteLocationName: true,
+          campus_program_id_majorTocampus: {
+            include: {
+              standard_major: {
+                select: {
+                  major_name: true,
+                },
+              },
+            },
+          },
+        },
+      },
+      major: {
+        include: {
+          standard_major: true,
+        },
+      },
+    },
+  });
+
+  if (!detailCampus) {
+    return "Kampus tidak ditemukan.";
+  }
+
+  let formattedCampus = { ...detailCampus };
+
+  // delete old path_logo and add new url logo_url
+  formattedCampus.logo_url = formatPathToUrl(
+    formattedCampus.path_logo,
+    BASE_URL,
+  );
+  delete formattedCampus.path_logo;
+
+  // delete old path_banner and add new url banner_url
+  formattedCampus.banner_url = formatPathToUrl(
+    formattedCampus.path_banner,
+    BASE_URL,
+  );
+  delete formattedCampus.path_banner;
+
+  // 🏆 3. FORMAT PATH GAMBAR DI DALAM RELASI PROGRAM (jika ada)
+  if (formattedCampus.program_program_id_campusTocampus) {
+    formattedCampus.program_program_id_campusTocampus =
+      formattedCampus.program_program_id_campusTocampus.map((program) => {
+        // Duplikasi objek program
+        let formattedProgram = { ...program };
+
+        // Format path_gambar program dan hapus path lama
+        formattedProgram.image_url = formatPathToUrl(
+          formattedProgram.path_gambar,
+          BASE_URL,
+        );
+        delete formattedProgram.path_gambar;
+
+        return formattedProgram;
+      });
+  }
+
+  // console.log(formattedCampus);
+
+  return {
+    message: "Detail campus ditemukan",
+    data: formattedCampus,
+  };
+};

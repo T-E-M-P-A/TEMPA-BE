@@ -84,3 +84,18 @@ export const getAllCampus = async (req, res, next) => {
     next(error);
   }
 };
+
+// get detail campus
+export const detailCampus = async (req, res, next) => {
+  try {
+    const idCampus = req.params.id;
+    const result = await menteeService.detailCampus(idCampus);
+
+    res.status(200).json({
+      message: result.message,
+      data: result.data,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
