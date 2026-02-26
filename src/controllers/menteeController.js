@@ -117,3 +117,17 @@ export const registerProgram = async (req, res, next) => {
     next(error);
   }
 };
+
+// get majors
+export const getMajors = async (req, res, next) => {
+  try {
+    const result = await menteeService.getMajors();
+
+    res.status(200).json({
+      message: result.message,
+      data: result.data,
+    });
+  } catch (error) {
+    next(error);
+  }
+};

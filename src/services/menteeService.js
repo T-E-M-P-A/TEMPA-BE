@@ -579,3 +579,26 @@ export const registerProgram = async (idMentee, idProgramInt) => {
     data: registerProgram,
   };
 };
+
+// get majors
+export const getMajors = async () => {
+  const allMajors = await prisma.standard_major.findMany({});
+
+  if (!allMajors) {
+    return { message: "Data Jurusan tidak ada." };
+  }
+
+  const formattedMajors = allMajors.map((major) => {
+    const bannerUrl = formatPathToUrl(major.path_banner, BASE_URL);
+    const newMajor = { ...major, banner_url: bannerUrl };
+    delete newMajor.path_banner;
+    return newMajor;
+  });
+
+  // console.log(formattedMajors);
+
+  return {
+    message: "Data Jurusan ditemukan",
+    data: formattedMajors,
+  };
+};

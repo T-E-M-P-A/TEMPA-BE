@@ -68,34 +68,7 @@ router.get(
   "/mentee/all-majors",
   authenticateUser,
   authorizeRoles(["mentee"]),
-  async (req, res) => {
-    try {
-      const allMajors = await prisma.standard_major.findMany({});
-
-      if (!allMajors) {
-        return res.status(404).json({ message: "Data Jurusan tidak ada." });
-      }
-
-      const formattedMajors = allMajors.map((major) => {
-        const bannerUrl = formatPathToUrl(major.path_banner, BASE_URL);
-        const newMajor = { ...major, banner_url: bannerUrl };
-        delete newMajor.path_banner;
-        return newMajor;
-      });
-
-      console.log(formattedMajors);
-
-      return res.status(200).json({
-        message: "Data Jurusan ditemukan",
-        data: formattedMajors,
-      });
-    } catch (error) {
-      console.log(error);
-      return res
-        .status(500)
-        .json({ message: "Not Found due to internal error." });
-    }
-  },
+  menteeController.getMajors,
 );
 
 // get detail majors
