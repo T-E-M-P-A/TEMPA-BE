@@ -41,3 +41,17 @@ export const getProgramMentee = async (req, res, next) => {
     next(error);
   }
 };
+
+// get all program
+export const getAllProgram = async (req, res, next) => {
+  try {
+    const result = await menteeService.getAllProgram();
+
+    res.status(200).json({
+      message: result.message,
+      data: result.data,
+    });
+  } catch (error) {
+    next(error);
+  }
+};

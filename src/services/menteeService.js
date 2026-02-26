@@ -164,3 +164,72 @@ export const getProgramMentee = async (menteeId) => {
     major_interest_status: !interest && !!responseAi,
   };
 };
+
+export const getAllProgram = async () => {
+  const getAllProgram = await prisma.program.findMany({
+    where: {
+      visibility: "public",
+      campus_program_id_campusTocampus: {
+        verification_status: "accepted",
+      },
+    },
+    include: {
+      campus_program_id_campusTocampus: {
+        select: {
+          campus_name: true,
+        },
+      },
+      campus_program_id_majorTocampus: {
+        include: {
+          standard_major: true,
+        },
+      },
+    },
+  });
+
+  const formatGetAllProgram = getAllProgram.map((item) => {
+    const rawPath = item.path_gambar;
+    let finalPath = rawPath;
+
+    if (finalPath) {
+      if (finalPath.startsWith("/")) {
+        finalPath = finalPath.substring(1);
+      }
+      if (finalPath.startsWith("uploads/")) {
+        finalPath = finalPath.substring("uploads/".length);
+      }
+    }
+
+    // Menentukan URL gambar akhir
+    const imageUrl = finalPath ? `${BASE_URL}/public/${finalPath}` : null;
+
+    // 1. Ambil semua properti item
+    const newItem = { ...item };
+
+    // 2. Hapus properti path_gambar yang lama (opsional, tapi disarankan)
+    delete newItem.path_gambar;
+
+    // 3. Tambahkan properti image_url yang baru
+    newItem.image_url = imageUrl;
+
+    // 4. Tambahkan/ubah struktur properti relasi sesuai kebutuhan (jika diperlukan)
+    // Contoh: Membuat major_name lebih mudah diakses (opsional)
+    newItem.major_name =
+      item.campus_program_id_majorTocampus?.standard_major?.major_name || null;
+    newItem.campus_name =
+      item.campus_program_id_campusTocampus?.campus_name || null;
+
+    // Hapus objek relasi yang panjang jika sudah tidak diperlukan
+    delete newItem.campus_program_id_majorTocampus;
+    delete newItem.campus_program_id_campusTocampus;
+
+    return newItem;
+  });
+  // console.log(formatGetAllProgram);
+
+  // Mengirimkan data sebagai respons
+  return {
+    message: "Data Berhasil Dipanggil",
+    data: formatGetAllProgram,
+  };
+};
