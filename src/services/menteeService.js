@@ -484,3 +484,98 @@ export const detailCampus = async (idCampus) => {
     data: formattedCampus,
   };
 };
+
+// register mentee program
+export const registerProgram = async (idMentee, idProgramInt) => {
+  if (!idProgramInt || !idMentee) {
+    return {
+      message: "ID Program atau ID Mentee tidak ditemukan.",
+    };
+  }
+
+  // check if mentee is already register to program
+  const existingEnrollment = await prisma.mentee_progress.findFirst({
+    where: {
+      id_mentee: idMentee,
+      id_program: idProgramInt,
+    },
+  });
+
+  // if already register program
+  if (existingEnrollment) {
+    return {
+      message: `Anda sudah mendaftar program tersebut!`,
+      data: existingEnrollment,
+    };
+  }
+
+  // Check program status and capacity
+  const programData = await prisma.program.findUnique({
+    where: {
+      id: idProgramInt,
+    },
+    select: {
+      capacity: true,
+      start_regis_date: true,
+      end_regis_date: true,
+      start_program_date: true,
+      end_program_date: true,
+    },
+  });
+
+  if (!programData) {
+    return { message: "Program tidak ditemukan." };
+  }
+
+  if (new Date(programData.start_regis_date) > new Date()) {
+    return {
+      message: "Pendaftaran belum dibuka!",
+    };
+  }
+
+  if (new Date(programData.end_regis_date) < new Date()) {
+    return {
+      message: "Pendaftaran sudah tutup!",
+    };
+  }
+
+  if (new Date(programData.end_program_date) < new Date()) {
+    return {
+      message: "Program sudah tutup/selesai!",
+    };
+  }
+
+  if (programData.capacity <= 0) {
+    return {
+      message: "Kuota program sudah penuh!",
+    };
+  }
+
+  // Register program and decrement capacity
+  const registerProgram = await prisma.$transaction(async (tx) => {
+    const newProgress = await tx.mentee_progress.create({
+      data: {
+        completion_status: "on_going",
+        completion_date: null,
+        id_mentee: idMentee,
+        id_program: idProgramInt,
+        create_at: new Date(),
+      },
+    });
+
+    await tx.program.update({
+      where: { id: idProgramInt },
+      data: {
+        capacity: { decrement: 1 },
+      },
+    });
+
+    return newProgress;
+  });
+  // console.log(registerProgram);
+
+  return {
+    message: `Pendaftaran berhasil!`,
+    data: registerProgram,
+  };
+};

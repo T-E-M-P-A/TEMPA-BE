@@ -99,3 +99,21 @@ export const detailCampus = async (req, res, next) => {
     next(error);
   }
 };
+
+// register program
+export const registerProgram = async (req, res, next) => {
+  try {
+    const idMentee = req.user.id;
+    const { idProgram } = req.params;
+    const idProgramInt = parseInt(idProgram);
+
+    const result = await menteeService.registerProgram(idMentee, idProgramInt);
+
+    res.status(201).json({
+      message: result.message,
+      data: result.data,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
