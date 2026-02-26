@@ -195,3 +195,24 @@ export const getMateri = async (req, res, next) => {
     next(error);
   }
 };
+
+// give feedback
+export const giveFeedbackProgram = async (req, res, next) => {
+  try {
+    const idMentee = req.user.id;
+    const { idProgram } = req.params;
+
+    const result = await menteeService.giveFeedbackProgram(
+      idMentee,
+      idProgram,
+      req.body,
+    );
+
+    res.status(200).json({
+      message: result.message,
+      data: result.data,
+    });
+  } catch (error) {
+    next(error);
+  }
+};

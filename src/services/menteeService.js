@@ -971,3 +971,63 @@ export const getMateri = async (idProgram, idMentee) => {
     data: formattedMateriPath,
   };
 };
+
+// give feedback to program
+export const giveFeedbackProgram = async (idProgram, idMentee, reqBody) => {
+  const { rating, feedback } = reqBody;
+  const idProgramInt = parseInt(idProgram);
+
+  if (isNaN(idProgramInt)) {
+    throw new AppError("ID Program tidak valid.", 400);
+  }
+
+  if (!rating || !feedback) {
+    throw new AppError("Rating dan evaluasi wajib diisi.", 400);
+  }
+
+  // 1. Cek apakah program ada
+  const program = await prisma.program.findUnique({
+    where: { id: idProgramInt },
+  });
+
+  if (!program) {
+    throw new AppError("Program tidak ditemukan.", 404);
+  }
+
+  // 2. Cek apakah mentee terdaftar di program tersebut
+  const isEnrolled = await prisma.mentee_progress.findFirst({
+    where: {
+      id_mentee: parseInt(idMentee),
+      id_program: idProgramInt,
+    },
+  });
+
+  if (!isEnrolled) {
+    throw new AppError("Anda tidak terdaftar di program ini.", 403);
+  }
+
+  // 3. Simpan feedback
+  const newFeedback = await prisma.program_feedback.create({
+    data: {
+      id_program: idProgramInt,
+      id_mentee: parseInt(idMentee),
+      rating: parseInt(rating),
+      evaluation: feedback,
+    },
+  });
+
+  const changeCompletionStatus = await prisma.mentee_progress.update({
+    where: {
+      id: isEnrolled.id,
+    },
+    data: {
+      completion_status: "completed",
+      completion_date: new Date(),
+    },
+  });
+
+  return {
+    message: "Feedback berhasil dikirim.",
+    data: newFeedback,
+  };
+};
