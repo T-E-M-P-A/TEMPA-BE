@@ -1176,3 +1176,64 @@ export const majorInterest = async (menteeId, reqBody) => {
     data: majorIds,
   };
 };
+
+// edit profile mentee
+export const editProfileMentee = async (menteeId, reqBody) => {
+  const {
+    fullName,
+    gender,
+    educationStatus,
+    valueProvince,
+    valueCity,
+    valueSubdistrict,
+    valueWard,
+    dob,
+  } = reqBody;
+
+  try {
+    // Mapping gender
+    let genderEnum = null;
+    if (gender === "Laki-laki") {
+      genderEnum = "Male";
+    } else if (gender === "Perempuan") {
+      genderEnum = "Female";
+    } else {
+      genderEnum = gender;
+    }
+
+    // Mapping education status
+    const educationStatusMap = {
+      0: "Siswa_Aktif__SMA_SMK_Sederajat_",
+      1: "Lulusan_Baru___Gap_Year__Belum_Kuliah_",
+      2: "Mahasiswa_Aktif",
+      3: "Lainnya",
+    };
+
+    const updatedMentee = await prisma.mentee.update({
+      where: {
+        id: menteeId,
+      },
+      data: {
+        username: fullName,
+        gender: genderEnum,
+        date_of_birth: dob ? new Date(dob) : null,
+        province: valueProvince,
+        city: valueCity,
+        subdistrict: valueSubdistrict,
+        ward: valueWard,
+        education_status: educationStatusMap[educationStatus] || null,
+        verify_status: true,
+      },
+    });
+
+    return {
+      message: "Data profil berhasil diperbarui.",
+      data: updatedMentee,
+    };
+  } catch (error) {
+    console.error("Gagal memperbarui profil mentee:", error);
+    if (error.code === "P2002") {
+      throw new AppError("Email sudah terdaftar.", 409);
+    }
+  }
+};
