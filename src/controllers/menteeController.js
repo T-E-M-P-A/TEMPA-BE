@@ -246,3 +246,19 @@ export const checkVerifyStatus = async (req, res, next) => {
     next(error);
   }
 };
+
+// get profile mentee
+export const getProfileMentee = async (req, res, next) => {
+  try {
+    const menteeId = req.user.id;
+
+    const result = await menteeService.getProfileMentee(menteeId);
+
+    res.status(200).json({
+      message: result.message,
+      data: result.data,
+    });
+  } catch (error) {
+    next(error);
+  }
+};

@@ -1109,3 +1109,28 @@ export const checkVerifyAccount = async (menteeId) => {
     data: mentee,
   };
 };
+
+// get profile mentee
+export const getProfileMentee = async (menteeId) => {
+  const mentee = await prisma.mentee.findUnique({
+    where: {
+      id: menteeId,
+    },
+    select: {
+      username: true,
+      email: true,
+      education_status: true,
+      gender: true,
+      date_of_birth: true,
+      province: true,
+      city: true,
+      subdistrict: true,
+      ward: true,
+    },
+  });
+
+  return {
+    message: "Data profil mentee berhasil diambil.",
+    data: mentee,
+  };
+};

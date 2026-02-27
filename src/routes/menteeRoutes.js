@@ -120,38 +120,6 @@ router.put(
 );
 
 // check verif account
-// router.get(
-//   "/mentee/check-verify-status",
-//   authenticateUser,
-//   authorizeRoles(["mentee"]),
-//   async (req, res) => {
-//     const menteeId = req.user.id;
-
-//     try {
-//       const mentee = await prisma.mentee.findUnique({
-//         where: {
-//           id: menteeId,
-//         },
-//         select: {
-//           verify_status: true,
-//         },
-//       });
-
-//       return res.status(200).json({
-//         message: "Status verifikasi berhasil diambil.",
-//         data: mentee,
-//       });
-//     } catch (error) {
-//       console.error("Gagal mengambil status verifikasi:", error);
-//       return res.status(500).json({
-//         message: "Terjadi kesalahan server.",
-//         error: error.message,
-//       });
-//     }
-//   },
-// );
-
-// check verif account
 router.get(
   "/mentee/check-verify-status",
   authenticateUser,
@@ -164,39 +132,7 @@ router.get(
   "/mentee/get-profile",
   authenticateUser,
   authorizeRoles(["mentee"]),
-  async (req, res) => {
-    const menteeId = req.user.id;
-
-    try {
-      const mentee = await prisma.mentee.findUnique({
-        where: {
-          id: menteeId,
-        },
-        select: {
-          username: true,
-          email: true,
-          education_status: true,
-          gender: true,
-          date_of_birth: true,
-          province: true,
-          city: true,
-          subdistrict: true,
-          ward: true,
-        },
-      });
-
-      return res.status(200).json({
-        message: "Data profil mentee berhasil diambil.",
-        data: mentee,
-      });
-    } catch (error) {
-      console.error("Gagal mengambil data profil mentee:", error);
-      return res.status(500).json({
-        message: "Terjadi kesalahan server.",
-        error: error.message,
-      });
-    }
-  },
+  menteeController.getProfileMentee,
 );
 
 // edit mentee profile
