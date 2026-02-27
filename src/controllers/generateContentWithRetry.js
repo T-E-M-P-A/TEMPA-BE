@@ -9,7 +9,7 @@ const MAX_RETRIES = 3;
 async function generateContentWithRetry(
   config,
   userProfile,
-  systemInstruction
+  systemInstruction,
 ) {
   const ai = new GoogleGenAI({});
   let currentRetry = 0;
@@ -27,11 +27,8 @@ async function generateContentWithRetry(
         },
       });
 
-      // Berhasil, kembalikan respons
       return response;
     } catch (error) {
-      // Periksa apakah error adalah 503 (atau error API yang relevan)
-      // Struktur error bisa berbeda, kita asumsikan error.code dari pesan string error
       const isOverloadedError = error.message && error.message.includes("503");
 
       if (isOverloadedError && currentRetry < MAX_RETRIES - 1) {
@@ -41,11 +38,10 @@ async function generateContentWithRetry(
         console.warn(
           `[RETRY] Model overloaded (503). Mencoba ulang ke-${currentRetry} dalam ${
             delay / 1000
-          } detik...`
+          } detik...`,
         );
         await new Promise((resolve) => setTimeout(resolve, delay));
       } else {
-        // Jika sudah melebihi batas percobaan, atau error bukan 503
         throw error;
       }
     }
