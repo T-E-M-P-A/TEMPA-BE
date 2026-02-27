@@ -310,3 +310,17 @@ export const getMajorInterest = async (req, res, next) => {
     next(error);
   }
 };
+
+export const addSeenProgram = async (req, res, next) => {
+  try {
+    const menteeId = req.user.id;
+    const { idProgram } = req.params;
+
+    const result = await menteeService.viewsProgram(menteeId, idProgram);
+
+    res.status(200).json({
+      message: result.message,
+      data: result.data,
+    });
+  } catch (error) {}
+};

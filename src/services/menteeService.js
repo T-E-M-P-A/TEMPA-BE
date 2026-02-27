@@ -1261,3 +1261,38 @@ export const getMajorInterest = async (menteeId) => {
     data: data,
   };
 };
+
+export const viewsProgram = async (menteeId, idProgram) => {
+  const idProgramInt = parseInt(idProgram);
+
+  if (isNaN(idProgramInt)) {
+    throw new AppError("ID Program tidak valid.", 400);
+  }
+
+  // check log in table view_log_program if mentee never seen the program
+  const existingLog = await prisma.view_log_program.findFirst({
+    where: {
+      id_program: idProgramInt,
+      id_mentee: menteeId,
+    },
+  });
+
+  if (!existingLog) {
+    // add idMentee and idProgram if mentee seen program
+    await prisma.$transaction([
+      prisma.view_log_program.create({
+        data: {
+          id_program: idProgramInt,
+          id_mentee: menteeId,
+        },
+      }),
+      // update atribut seen
+      prisma.program.update({
+        where: { id: idProgramInt },
+        data: { seen: { increment: 1 } },
+      }),
+    ]);
+  }
+
+  return { message: "Berhasil mencatat view program." };
+};

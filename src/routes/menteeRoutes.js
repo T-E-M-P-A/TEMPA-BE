@@ -164,54 +164,7 @@ router.post(
   "/mentee/add-seen-program/:idProgram",
   authenticateUser,
   authorizeRoles(["mentee"]),
-  async (req, res) => {
-    // console.log(req.user.id);
-
-    const menteeId = req.user.id;
-    const { idProgram } = req.params;
-    const idProgramInt = parseInt(idProgram);
-
-    if (isNaN(idProgramInt)) {
-      return res.status(400).json({ message: "ID Program tidak valid." });
-    }
-
-    try {
-      // check log in table view_log_program if mentee never seen the program
-      const existingLog = await prisma.view_log_program.findFirst({
-        where: {
-          id_program: idProgramInt,
-          id_mentee: menteeId,
-        },
-      });
-
-      if (!existingLog) {
-        // add idMentee and idProgram if mentee seen program
-        await prisma.$transaction([
-          prisma.view_log_program.create({
-            data: {
-              id_program: idProgramInt,
-              id_mentee: menteeId,
-            },
-          }),
-          // update atribut seen
-          prisma.program.update({
-            where: { id: idProgramInt },
-            data: { seen: { increment: 1 } },
-          }),
-        ]);
-      }
-
-      return res
-        .status(200)
-        .json({ message: "Berhasil mencatat view program." });
-    } catch (error) {
-      console.error("Gagal mencatat view program:", error);
-      return res.status(500).json({
-        message: "Terjadi kesalahan server.",
-        error: error.message,
-      });
-    }
-  },
+  menteeController.addSeenProgram,
 );
 
 // add seen every mentee see detail campus
