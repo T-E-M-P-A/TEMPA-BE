@@ -1134,3 +1134,45 @@ export const getProfileMentee = async (menteeId) => {
     data: mentee,
   };
 };
+
+// save mentee major interest
+export const majorInterest = async (menteeId, reqBody) => {
+  const { selectedMajors } = reqBody;
+
+  if (!selectedMajors || !Array.isArray(selectedMajors)) {
+    throw new AppError(
+      "Format data tidak valid. 'selectedMajors' harus berupa array.",
+      400,
+    );
+  }
+
+  const majorIds = selectedMajors
+    .map((id) => parseInt(id))
+    .filter((id) => !isNaN(id));
+
+  await prisma.$transaction(async (tx) => {
+    // 1. Hapus data lama
+    await tx.mentee_major_interest.deleteMany({
+      where: {
+        id_mentee: menteeId,
+      },
+    });
+
+    // 2. Tambah data baru
+    if (majorIds.length > 0) {
+      const dataToInsert = majorIds.map((majorId) => ({
+        id_mentee: menteeId,
+        id_major: majorId,
+      }));
+
+      await tx.mentee_major_interest.createMany({
+        data: dataToInsert,
+      });
+    }
+  });
+
+  return {
+    message: "Minat jurusan berhasil disimpan.",
+    data: majorIds,
+  };
+};
