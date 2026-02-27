@@ -294,3 +294,19 @@ export const editProfileMentee = async (req, res, next) => {
     next(error);
   }
 };
+
+// get major insterest mentee
+export const getMajorInterest = async (req, res, next) => {
+  try {
+    const menteeId = req.user.id;
+
+    const result = await menteeService.getMajorInterest(menteeId);
+
+    res.status(200).json({
+      message: result.message,
+      data: result.data,
+    });
+  } catch (error) {
+    next(error);
+  }
+};

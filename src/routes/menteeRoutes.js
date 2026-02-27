@@ -156,38 +156,7 @@ router.get(
   "/mentee/get-major-interest",
   authenticateUser,
   authorizeRoles(["mentee"]),
-  async (req, res) => {
-    const menteeId = req.user.id;
-
-    try {
-      const interests = await prisma.mentee_major_interest.findMany({
-        where: {
-          id_mentee: menteeId,
-        },
-        include: {
-          standard_major: {
-            select: {
-              id: true,
-            },
-          },
-        },
-      });
-
-      // Mengambil detail standard_major dari hasil query
-      const data = interests.map((item) => item.id_major);
-
-      return res.status(200).json({
-        message: "Data minat jurusan berhasil diambil.",
-        data: data,
-      });
-    } catch (error) {
-      console.error("Gagal mengambil minat jurusan:", error);
-      return res.status(500).json({
-        message: "Terjadi kesalahan server saat mengambil minat jurusan.",
-        error: error.message,
-      });
-    }
-  },
+  menteeController.getMajorInterest,
 );
 
 // add seen every mentee see detail program

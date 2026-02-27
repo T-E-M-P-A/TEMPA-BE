@@ -1237,3 +1237,27 @@ export const editProfileMentee = async (menteeId, reqBody) => {
     }
   }
 };
+
+// get major interest
+export const getMajorInterest = async (menteeId) => {
+  const interests = await prisma.mentee_major_interest.findMany({
+    where: {
+      id_mentee: menteeId,
+    },
+    include: {
+      standard_major: {
+        select: {
+          id: true,
+        },
+      },
+    },
+  });
+
+  // get detail standart_major from query
+  const data = interests.map((item) => item.id_major);
+
+  return {
+    message: "Data minat jurusan berhasil diambil.",
+    data: data,
+  };
+};
