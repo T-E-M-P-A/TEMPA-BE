@@ -324,3 +324,19 @@ export const addSeenProgram = async (req, res, next) => {
     });
   } catch (error) {}
 };
+
+export const addSeenCampus = async (req, res, next) => {
+  try {
+    const menteeId = req.user.id;
+    const idCampus = parseInt(req.params.idCampus);
+
+    const result = await menteeService.viewsCampus(menteeId, idCampus);
+
+    res.status(200).json({
+      message: result.message,
+      data: result.data,
+    });
+  } catch {
+    next(error);
+  }
+};

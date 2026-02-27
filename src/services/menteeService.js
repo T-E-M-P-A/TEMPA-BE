@@ -1296,3 +1296,36 @@ export const viewsProgram = async (menteeId, idProgram) => {
 
   return { message: "Berhasil mencatat view program." };
 };
+
+export const viewsCampus = async (menteeId, idCampus) => {
+  if (isNaN(idCampus)) {
+    throw new AppError("ID Kampus tidak valid.", 400);
+  }
+
+  // check log in table view_log_program if mentee never seen the program
+  const existingLog = await prisma.view_log_campus.findFirst({
+    where: {
+      id_campus: idCampus,
+      id_mentee: menteeId,
+    },
+  });
+
+  if (!existingLog) {
+    // add idMentee and idCampus if mentee seen campus detail page
+    await prisma.$transaction([
+      prisma.view_log_campus.create({
+        data: {
+          id_campus: idCampus,
+          id_mentee: menteeId,
+        },
+      }),
+      // update atribut seen
+      prisma.campus.update({
+        where: { id: idCampus },
+        data: { seen: { increment: 1 } },
+      }),
+    ]);
+  }
+
+  return { message: "Berhasil mencatat view kampus." };
+};
