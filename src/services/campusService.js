@@ -708,3 +708,51 @@ export const getAllMenteeWhereRegisteredProgram = async (
     data: formattedData,
   };
 };
+
+// get program feedback
+export const getProgramFeedback = async (idCampus, idProgram) => {
+  if (isNaN(idProgram)) {
+    throw new AppError("ID Program tidak valid. Harus berupa angka.", 400);
+  }
+
+  const program = await prisma.program.findFirst({
+    where: {
+      id: idProgram,
+      id_campus: idCampus,
+    },
+  });
+
+  if (!program) {
+    throw new AppError(
+      "Program tidak ditemukan atau bukan milik kampus ini.",
+      404,
+    );
+  }
+
+  const feedbacks = await prisma.program_feedback.findMany({
+    where: {
+      id_program: idProgram,
+    },
+    include: {
+      mentee: {
+        select: {
+          username: true,
+          email: true,
+        },
+      },
+    },
+  });
+
+  const formattedFeedbacks = feedbacks.map((item) => ({
+    id: item.id,
+    rating: item.rating,
+    evaluation: item.evaluation,
+    username: item.mentee?.username || "Unknown",
+    email: item.mentee?.email,
+  }));
+
+  return {
+    message: "Data feedback program berhasil diambil.",
+    data: formattedFeedbacks,
+  };
+};

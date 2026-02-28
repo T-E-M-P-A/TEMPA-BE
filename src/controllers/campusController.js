@@ -127,3 +127,19 @@ export const getAllMenteeWhereRegisteredProgram = async (req, res, next) => {
     next(error);
   }
 };
+
+export const getProgramFeedback = async (req, res, next) => {
+  try {
+    const idCampus = req.user.id;
+    const idProgram = parseInt(req.params.id);
+
+    const result = await campusService.getProgramFeedback(idCampus, idProgram);
+
+    res.status(200).json({
+      message: result.message,
+      data: result.data,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
