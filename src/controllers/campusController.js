@@ -75,3 +75,19 @@ export const getDetailVerificationCampus = async (req, res, next) => {
     next(error);
   }
 };
+
+// get all program by campus id
+export const getAllProgramByCampusId = async (req, res, next) => {
+  try {
+    const idCampus = req.user.id;
+
+    const result = await campusService.getAllProgramByCampusId(idCampus);
+
+    res.status(200).json({
+      message: result.message,
+      data: result.data,
+    });
+  } catch (error) {
+    next(error);
+  }
+};

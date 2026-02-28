@@ -176,89 +176,12 @@ router.get(
   campusController.getDetailVerificationCampus,
 );
 
-// =======================================================================
-// 4. GET ALL PROGRAMS BY CAMPUS ID
-// =======================================================================
+// get all program by campus id
 router.get(
   "/get-program-campus",
   authenticateUser,
   authorizeRoles(["campus"]),
-  async (req, res) => {
-    const idCampus = req.user.id;
-
-    try {
-      const getProgram = await prisma.program.findMany({
-        where: {
-          id_campus: idCampus,
-        },
-        include: {
-          campus_program_id_majorTocampus: {
-            include: {
-              standard_major: {
-                select: {
-                  major_name: true,
-                },
-              },
-            },
-          },
-          sesi_program: {
-            select: {
-              type_sesi: true,
-              sesi_date: true,
-            },
-          },
-        },
-        orderBy: {
-          create_at: "desc",
-        },
-      });
-
-      const formattedPrograms = getProgram.map((item) => {
-        const imageUrl = formatPathToUrl(item.path_gambar, BASE_URL);
-
-        const majorName =
-          item.campus_program_id_majorTocampus?.standard_major?.major_name ||
-          null;
-
-        const newItem = {
-          id: item.id,
-          program_name: item.program_name,
-          description: item.description,
-          start_date: item.start_regis_date,
-          end_date: item.end_regis_date,
-          capacity: item.capacity,
-          program_status: item.program_status,
-          onsiteLocationName: item.onsiteLocationName,
-          major_name: majorName,
-          image_url: imageUrl,
-          sesi_program: item.type_sesi,
-          visibility: item.visibility,
-        };
-
-        return newItem;
-      });
-
-      console.log(formattedPrograms);
-
-      if (formattedPrograms.length === 0) {
-        return res.status(200).json({
-          message: "Kampus belum memiliki program yang terdaftar.",
-          data: [],
-        });
-      }
-
-      return res.status(200).json({
-        message: "Data program kampus berhasil didapatkan.",
-        data: formattedPrograms,
-      });
-    } catch (error) {
-      console.error("Error fetching campus programs:", error);
-      return res.status(500).json({
-        message: "Terjadi kesalahan server saat mengambil data program.",
-        error: error.message,
-      });
-    }
-  },
+  campusController.getAllProgramByCampusId,
 );
 
 // =======================================================================
