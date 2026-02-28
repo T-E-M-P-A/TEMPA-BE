@@ -856,3 +856,36 @@ export const getNameCampus = async (campusName) => {
     });
   });
 };
+
+// get program campus data for chart
+export const getProgramCampusDataChart = async (idCampus) => {
+  const getProgramCampus = await prisma.program.findMany({
+    where: {
+      id_campus: idCampus,
+    },
+    select: {
+      id: true,
+      program_name: true,
+      _count: {
+        select: {
+          mentee_progress: true,
+        },
+      },
+    },
+  });
+
+  // get count total mentee
+  const programsWithMenteeCount = getProgramCampus.map((program) => ({
+    id: program.id,
+    program_name: program.program_name,
+    // Total mentee diambil dari hasil perhitungan _count
+    total_mentee: program._count.mentee_progress,
+  }));
+
+  // console.log(programsWithMenteeCount);
+
+  return {
+    message: "Data program beserta total mentee berhasil diambil",
+    data: programsWithMenteeCount,
+  };
+};
