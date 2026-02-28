@@ -7,6 +7,7 @@ import formatPathToUrl from "../controllers/formatPathUrl.js";
 import path, { dirname } from "path";
 import { fileURLToPath } from "url";
 import { spawn } from "child_process";
+import fs from "fs";
 
 const CLIENT_ID = process.env.CLIENT_ID;
 const client = new OAuth2Client(CLIENT_ID);
@@ -888,4 +889,133 @@ export const getProgramCampusDataChart = async (idCampus) => {
     message: "Data program beserta total mentee berhasil diambil",
     data: programsWithMenteeCount,
   };
+};
+
+// create program
+export const createProgram = async (reqBody, idCampus, reqFile) => {
+  // 1. Validasi awal
+  if (!reqFile) {
+    throw new AppError("Gambar program wajib diunggah.", 400);
+  }
+
+  // Destructuring dari reqBody (Argumen pertama dari controller)
+  const {
+    name,
+    majorName,
+    programType,
+    visibility,
+    startRegisDate,
+    endRegisDate,
+    startDateProgram,
+    endDateProgram,
+    startTime,
+    endTime,
+    capacity,
+    description,
+    benefits,
+    terms,
+    location_name,
+    mapLat,
+    mapLng,
+  } = reqBody;
+
+  // 2. Validasi field wajib
+  const requiredFields = {
+    name,
+    majorName,
+    programType,
+    visibility,
+    startRegisDate,
+    endRegisDate,
+    startDateProgram,
+    endDateProgram,
+    startTime,
+    endTime,
+    capacity,
+    description,
+    benefits,
+    terms,
+  };
+
+  for (const [field, value] of Object.entries(requiredFields)) {
+    if (!value) {
+      // Jika error di sini, file harus dihapus
+      if (reqFile) fs.unlinkSync(reqFile.path);
+      throw new AppError(`Field '${field}' wajib diisi.`, 400);
+    }
+  }
+
+  try {
+    const majorId = parseInt(majorName, 10);
+
+    const major = await prisma.major.findFirst({
+      where: {
+        id_standard_major: majorId,
+        id_campus: parseInt(idCampus),
+      },
+    });
+
+    // console.log(majorId);
+    if (!major) {
+      throw new AppError("Jurusan tidak ditemukan atau bukan milik Anda.", 404);
+    }
+
+    // Helper JSON Parser
+    const parseJsonOrWrapInArray = (value) => {
+      if (typeof value === "string") {
+        try {
+          return JSON.parse(value);
+        } catch (e) {
+          return value
+            .split(",")
+            .map((i) => i.trim())
+            .filter((i) => i);
+        }
+      }
+      return Array.isArray(value) ? value : [];
+    };
+
+    const programData = {
+      program_name: name,
+      description: description,
+      start_program_date: new Date(startDateProgram),
+      end_program_date: new Date(endDateProgram),
+      start_regis_date: new Date(startRegisDate),
+      end_regis_date: new Date(endRegisDate),
+      capacity: parseInt(capacity, 10),
+      id_campus: parseInt(idCampus),
+      id_major: major.id,
+      path_gambar: reqFile.path.replace(/\\/g, "/"), // Gunakan reqFile
+      benefit: parseJsonOrWrapInArray(benefits),
+      terms_and_conditions: parseJsonOrWrapInArray(terms),
+      type_sesi: programType,
+      sesi_start: new Date(`1970-01-01T${startTime}:00`),
+      sesi_end: new Date(`1970-01-01T${endTime}:00`),
+      visibility: visibility,
+      create_at: new Date(),
+      update_at: new Date(),
+    };
+
+    if (programType === "onsite") {
+      if (!location_name || !mapLat || !mapLng) {
+        throw new AppError("Data lokasi onsite tidak lengkap.", 400);
+      }
+      programData.onsiteLocationName = location_name;
+      programData.lat = parseFloat(mapLat);
+      programData.lng = parseFloat(mapLng);
+    }
+
+    const newProgram = await prisma.program.create({ data: programData });
+
+    return { message: "Program berhasil dibuat.", data: newProgram };
+  } catch (error) {
+    // HAPUS FILE JIKA GAGAL DB
+    if (reqFile && fs.existsSync(reqFile.path)) {
+      fs.unlinkSync(reqFile.path);
+    }
+
+    // RE-THROW ERROR: Penting agar ditangkap Controller!
+    if (error instanceof AppError) throw error;
+    throw new AppError(error.message || "Gagal membuat program.", 500);
+  }
 };

@@ -145,6 +145,7 @@ export const getProgramFeedback = async (req, res, next) => {
   }
 };
 
+// get campus name from api
 export const getNameCampus = async (req, res, next) => {
   try {
     const { campusName } = req.params;
@@ -158,6 +159,7 @@ export const getNameCampus = async (req, res, next) => {
   }
 };
 
+// get data program campus for chart
 export const getProgramCampusDataChart = async (req, res, next) => {
   try {
     const idCampus = req.user.id;
@@ -168,6 +170,23 @@ export const getProgramCampusDataChart = async (req, res, next) => {
       message: result.message,
       data: result.data,
     });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// create program campus
+export const createProgram = async (req, res, next) => {
+  try {
+    const idCampus = req.user.id;
+
+    const result = await campusService.createProgram(
+      req.body,
+      idCampus,
+      req.file,
+    );
+
+    return res.status(201).json(result);
   } catch (error) {
     next(error);
   }
