@@ -192,79 +192,12 @@ router.get(
   campusController.getDetailProgram,
 );
 
-// =======================================================================
-// 6. GET ALL MENTEE WHERE REGISTERED PROGRAM BY ID
-// =======================================================================
+// get all mentee where registered program by id
 router.get(
   "/get-detail-program-total-mentee/:id",
   authenticateUser,
   authorizeRoles(["campus"]),
-  async (req, res) => {
-    const idCampus = req.user.id;
-    const idProgram = req.params.id;
-
-    try {
-      // ✅ GANTI DARI findMany MENJADI findFirst
-      const programData = await prisma.program.findFirst({
-        where: {
-          id: parseInt(idProgram),
-          id_campus: idCampus, // Verifikasi kepemilikan
-        },
-        select: {
-          mentee_progress: {
-            select: {
-              mentee: {
-                select: {
-                  username: true,
-                  email: true,
-                },
-              },
-            },
-          },
-          _count: {
-            select: {
-              mentee_progress: true,
-            },
-          },
-        },
-      });
-
-      if (!programData) {
-        return res.status(404).json({
-          message: "Program tidak ditemukan atau bukan milik kampus ini.",
-        });
-      }
-
-      const formattedData = {
-        total_mentee: programData._count.mentee_progress,
-        // Merapikan list mentee
-        mentees: programData.mentee_progress.map((mp) => ({
-          username: mp.mentee?.username,
-          email: mp.mentee?.email,
-        })),
-      };
-
-      console.log(formattedData);
-
-      return res.status(200).json({
-        message: "Data program beserta detail mentee berhasil diambil",
-        data: formattedData, // ✅ MENGEMBALIKAN OBJEK YANG SUDAH DIFORMAT
-      });
-    } catch (error) {
-      console.error("Error fetching detail program:", error);
-      // Handle error jika idProgram tidak valid (misalnya bukan integer)
-      if (error.message.includes("id must be of type integer")) {
-        return res.status(400).json({
-          message: "ID Program tidak valid.",
-          error: error.message,
-        });
-      }
-      return res.status(500).json({
-        message: "Terjadi kesalahan server saat mengambil detail program.",
-        error: error.message,
-      });
-    }
-  },
+  campusController.getAllMenteeWhereRegisteredProgram,
 );
 
 // =======================================================================

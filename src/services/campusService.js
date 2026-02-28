@@ -656,3 +656,55 @@ export const getDetailProgram = async (idCampus, idProgram) => {
     data: formattedDetail,
   };
 };
+
+// get all mentee where registered program
+export const getAllMenteeWhereRegisteredProgram = async (
+  idCampus,
+  idProgram,
+) => {
+  const programData = await prisma.program.findFirst({
+    where: {
+      id: parseInt(idProgram),
+      id_campus: idCampus,
+    },
+    select: {
+      mentee_progress: {
+        select: {
+          mentee: {
+            select: {
+              username: true,
+              email: true,
+            },
+          },
+        },
+      },
+      _count: {
+        select: {
+          mentee_progress: true,
+        },
+      },
+    },
+  });
+
+  if (!programData) {
+    throw new AppError(
+      "Program tidak ditemukan atau bukan milik kampus ini.",
+      404,
+    );
+  }
+
+  const formattedData = {
+    total_mentee: programData._count.mentee_progress,
+    mentees: programData.mentee_progress.map((mp) => ({
+      username: mp.mentee?.username,
+      email: mp.mentee?.email,
+    })),
+  };
+
+  // console.log(formattedData);
+
+  return {
+    message: "Data program beserta detail mentee berhasil diambil",
+    data: formattedData,
+  };
+};

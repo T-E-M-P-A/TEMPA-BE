@@ -108,3 +108,22 @@ export const getDetailProgram = async (req, res, next) => {
     next(error);
   }
 };
+
+// get all mentee where registered program
+export const getAllMenteeWhereRegisteredProgram = async (req, res, next) => {
+  try {
+    const idCampus = req.user.id;
+    const idProgram = req.params.id;
+
+    const result = await campusService.getAllMenteeWhereRegisteredProgram(
+      idCampus,
+      idProgram,
+    );
+    res.status(200).json({
+      message: result.message,
+      data: result.data,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
