@@ -14,6 +14,7 @@ import formatPathToUrl from "../controllers/formatPathUrl.js"; // Helper untuk f
 import bcrypt from "bcrypt";
 import nodemailer from "nodemailer";
 import mailQueue from "../lib/mailQueue.js";
+import * as campusController from "../controllers/campusController.js";
 
 const router = express.Router();
 
@@ -21,7 +22,7 @@ const CLIENT_ID = process.env.CLIENT_ID;
 const client = new OAuth2Client(CLIENT_ID);
 
 const JWT_SECRET = process.env.JWT_SECRET;
-const BASE_URL = process.env.API_BASE_URL; // Pastikan ini diatur di .env
+const BASE_URL = process.env.API_BASE_URL;
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -42,7 +43,7 @@ const PYTHON_VENV_PATH = path.join(
   PROJECT_ROOT,
   "venv_pddikti",
   "bin",
-  "python3"
+  "python3",
 );
 
 // Path Script Python
@@ -50,7 +51,7 @@ const PYTHON_SCRIPT_PATH = path.join(
   PROJECT_ROOT,
   "src",
   "controllers",
-  "dataCampus.py"
+  "dataCampus.py",
 );
 
 // Path Script Python untuk Mentor
@@ -58,7 +59,7 @@ const PYTHON_MENTOR_SCRIPT_PATH = path.join(
   PROJECT_ROOT,
   "src",
   "controllers",
-  "dataMentor.py"
+  "dataMentor.py",
 );
 // =======================================================================
 // MULTER CONFIG FOR PROGRAM IMAGE
@@ -84,7 +85,7 @@ const uploadProgramImage = multer({
   fileFilter: (req, file, cb) => {
     const fileTypes = /jpeg|jpg|png|gif/;
     const extname = fileTypes.test(
-      path.extname(file.originalname).toLowerCase()
+      path.extname(file.originalname).toLowerCase(),
     );
     const mimetype = fileTypes.test(file.mimetype);
     if (mimetype && extname) {
@@ -140,229 +141,15 @@ const normalizeResourcePath = (inputPath) => {
   return `program_materi/${parts[1]}`;
 };
 
-// =======================================================================
-// 1. OAUTH LOGIN CAMPUS
-// =======================================================================
-router.post("/login-campus", async (req, res) => {
-  const token = req.body.credential;
+// oauth login
+router.post("/login-campus", campusController.loginCampus);
 
-  if (!token) {
-    return res.status(400).json({ error: "No credential token provided." });
-  }
-
-  try {
-    const ticket = await client.verifyIdToken({
-      idToken: token,
-      audience: CLIENT_ID,
-    });
-
-    const payload = ticket.getPayload();
-
-    if (!payload) {
-      throw new Error("Invalid token payload.");
-    }
-
-    const { name, sub, email, email_verified } = payload;
-
-    if (!email_verified) {
-      return res
-        .status(401)
-        .json({ error: "Email Google belum diverifikasi." });
-    }
-
-    // get id user or add user
-    const userRecord = await findOrCreateCampus(payload);
-
-    // get user ID
-    const localUserId = userRecord.id;
-
-    const verifData = await prisma.campus.findFirst({
-      where: {
-        id: localUserId,
-      },
-      select: {
-        verification_status: true,
-        campus_name: true,
-      },
-    });
-
-    console.log(verifData);
-
-    const jwtPayload = {
-      id: localUserId, // id user
-      username: name,
-      email: email,
-      role: "campus",
-      verif: verifData,
-    };
-
-    // Buat token JWT
-    const signedJwtToken = jwt.sign(
-      jwtPayload,
-      JWT_SECRET,
-      { expiresIn: "1d" } // expired in 1 day
-    );
-
-    res.status(200).json({
-      message: "Login successful!",
-      data: {
-        token: signedJwtToken,
-        fullName: name,
-        uniqueId: localUserId,
-        email: email,
-      },
-    });
-  } catch (error) {
-    console.error("Token verification failed:", error.message);
-
-    if (error.message.includes("Wrong recipient")) {
-      const decoded = jwt.decode(token);
-      console.error(`[DEBUG] Backend CLIENT_ID: ${CLIENT_ID}`);
-      console.error(`[DEBUG] Token Audience (aud): ${decoded?.aud}`);
-    }
-
-    res.status(401).json({ error: "Authentication failed. Invalid token." });
-  }
-});
-
-// =======================================================================
-// 2. REGISTER MITRA CAMPUS (Update Data)
-// =======================================================================
+// register mitra campus (update data)
 router.post(
   "/register-mitra-campus",
   authenticateUser,
   authorizeRoles(["campus"]),
-  async (req, res) => {
-    const {
-      campusName,
-      emailCampus,
-      description,
-      websiteCampus,
-      province,
-      city,
-      subdistrict,
-      ward,
-      lat,
-      lng,
-      isCampusVerifiedByApi,
-    } = req.body;
-    const idCampus = req.user.id;
-
-    const requiredFields = [
-      "campusName",
-      "emailCampus",
-      "description",
-      "websiteCampus",
-      "province",
-      "city",
-      "subdistrict",
-      "ward",
-      "lat",
-      "lng",
-    ];
-
-    // check if req is null
-    for (const field of requiredFields) {
-      const value = req.body[field];
-
-      if (
-        value === undefined ||
-        value === null ||
-        (typeof value === "string" && value.trim() === "")
-      ) {
-        return res.status(400).json({
-          // 400 Bad Request
-          message: `Gagal: Kolom '${field}' wajib diisi dan tidak boleh kosong.`,
-        });
-      }
-    }
-
-    // check format email
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(emailCampus)) {
-      return res.status(400).json({
-        message: "Gagal: Format email tidak valid.",
-      });
-    }
-
-    try {
-      // convertion to float
-      const parsedLat = parseFloat(lat);
-      const parsedLng = parseFloat(lng);
-
-      // check if lat and lng value is float
-      if (isNaN(parsedLat) || isNaN(parsedLng)) {
-        return res.status(400).json({
-          message:
-            "Gagal: Latitude (lat) dan Longitude (lng) harus berupa angka yang valid.",
-        });
-      }
-
-      let checkValidationApi = null;
-
-      if (isCampusVerifiedByApi) {
-        checkValidationApi = "accepted";
-      } else {
-        checkValidationApi = "pending";
-      }
-
-      // Update data detail kampus
-      const saveDataCampus = await prisma.campus.update({
-        where: {
-          id: idCampus,
-        },
-        data: {
-          campus_name: campusName,
-          email_campus: emailCampus,
-          description: description,
-          website_campus: websiteCampus,
-          province: province,
-          city: city,
-          subdistrict: subdistrict,
-          ward: ward,
-          lat: parsedLat,
-          lng: parsedLng,
-        },
-      });
-
-      // Update status verifikasi
-      const changeVerificationStatus = await prisma.campus.update({
-        where: {
-          id: idCampus,
-        },
-        data: {
-          verification_status: checkValidationApi,
-        },
-      });
-
-      return res.status(200).json({
-        message: "Campus Berhasil Register",
-        data: saveDataCampus,
-      });
-    } catch (error) {
-      console.error("Prisma Error:", error);
-
-      // error unique email
-      if (error.code === "P2002") {
-        return res.status(409).json({
-          message: "Email kampus sudah terdaftar (pelanggaran unik).",
-        });
-      }
-      // error validation input
-      if (error.name === "PrismaClientValidationError") {
-        return res.status(400).json({
-          message:
-            "Kesalahan validasi input data. Cek fields yang wajib diisi.",
-          details: error.message,
-        });
-      }
-
-      return res.status(500).json({
-        message: "Terjadi kesalahan server saat menyimpan data.",
-        error: error.message,
-      });
-    }
-  }
+  campusController.registerCampus,
 );
 
 // =======================================================================
@@ -483,7 +270,7 @@ router.put(
         error: error.message,
       });
     }
-  }
+  },
 );
 
 // =======================================================================
@@ -525,7 +312,7 @@ router.get(
         error: error.message,
       });
     }
-  }
+  },
 );
 
 // =======================================================================
@@ -575,7 +362,7 @@ router.get(
         error: error.message,
       });
     }
-  }
+  },
 );
 
 // =======================================================================
@@ -660,7 +447,7 @@ router.get(
         error: error.message,
       });
     }
-  }
+  },
 );
 
 // =======================================================================
@@ -908,7 +695,7 @@ router.get(
         error: error.message,
       });
     }
-  }
+  },
 );
 
 // =======================================================================
@@ -983,7 +770,7 @@ router.get(
         error: error.message,
       });
     }
-  }
+  },
 );
 
 // =======================================================================
@@ -1051,7 +838,7 @@ router.get(
         error: error.message,
       });
     }
-  }
+  },
 );
 
 // =======================================================================
@@ -1089,7 +876,7 @@ router.get("/validate-campus/:campusName", (req, res) => {
   pythonProcess.on("close", (code) => {
     if (code !== 0) {
       console.error(
-        `Python script exited with code ${code}. Stderr: ${errorData}`
+        `Python script exited with code ${code}. Stderr: ${errorData}`,
       );
       // Coba parse outputData jika berisi error JSON dari Python
       try {
@@ -1158,7 +945,7 @@ router.get("/validate-mentor/:nik", (req, res) => {
   pythonProcess.on("close", (code) => {
     if (code !== 0) {
       console.error(
-        `Python script (mentor) exited with code ${code}. Stderr: ${errorData}`
+        `Python script (mentor) exited with code ${code}. Stderr: ${errorData}`,
       );
       try {
         const errorResult = JSON.parse(outputData);
@@ -1230,7 +1017,7 @@ router.get(
         error: error.message,
       });
     }
-  }
+  },
 );
 
 // =======================================================================
@@ -1425,7 +1212,7 @@ router.post(
         });
       }
     }
-  }
+  },
 );
 
 // =======================================================================
@@ -1539,7 +1326,7 @@ router.put(
         if (existingProgram.path_gambar) {
           const oldImagePath = path.join(
             process.cwd(),
-            existingProgram.path_gambar
+            existingProgram.path_gambar,
           );
           if (fs.existsSync(oldImagePath)) {
             fs.unlink(oldImagePath, (err) => {
@@ -1547,7 +1334,7 @@ router.put(
                 console.error(
                   "Gagal menghapus gambar lama:",
                   oldImagePath,
-                  err
+                  err,
                 );
               else console.log("Gambar lama berhasil dihapus:", oldImagePath);
             });
@@ -1595,7 +1382,7 @@ router.put(
           if (err)
             console.error(
               "Gagal menghapus file yang baru diunggah setelah error:",
-              err
+              err,
             );
         });
       }
@@ -1609,7 +1396,7 @@ router.put(
         error: error.message,
       });
     }
-  }
+  },
 );
 
 // =======================================================================
@@ -1695,7 +1482,7 @@ router.delete(
         error: error.message,
       });
     }
-  }
+  },
 );
 
 // get major for form major
@@ -1730,7 +1517,7 @@ router.get(
         .status(500)
         .json({ message: "Not Found due to internal error." });
     }
-  }
+  },
 );
 
 // get major campus
@@ -1767,7 +1554,7 @@ router.get(
         .status(500)
         .json({ message: "Not Found due to internal error." });
     }
-  }
+  },
 );
 
 // =======================================================================
@@ -1807,7 +1594,7 @@ router.get(
         .status(500)
         .json({ message: "Terjadi kesalahan internal pada server." });
     }
-  }
+  },
 );
 
 // =======================================================================
@@ -1875,7 +1662,7 @@ router.post(
         error: error.message,
       });
     }
-  }
+  },
 );
 
 // =======================================================================
@@ -1968,7 +1755,7 @@ router.put(
         error: error.message,
       });
     }
-  }
+  },
 );
 
 // =======================================================================
@@ -2046,7 +1833,7 @@ router.delete(
         error: error.message,
       });
     }
-  }
+  },
 );
 
 // =======================================================================
@@ -2109,16 +1896,16 @@ router.post(
       });
 
       const existingMentorIds = existingProgramMentors.map(
-        (pm) => pm.id_mentor
+        (pm) => pm.id_mentor,
       );
 
       // 5. Tentukan ID yang perlu dihapus dan ditambahkan
       const idsToDelete = existingMentorIds.filter(
-        (id) => !uniqueNewMentorIds.includes(id)
+        (id) => !uniqueNewMentorIds.includes(id),
       );
 
       const idsToAdd = uniqueNewMentorIds.filter(
-        (id) => !existingMentorIds.includes(id)
+        (id) => !existingMentorIds.includes(id),
       );
 
       // 6. Transaksi Database
@@ -2162,7 +1949,7 @@ router.post(
         error: error.message,
       });
     }
-  }
+  },
 );
 
 // =======================================================================
@@ -2189,7 +1976,7 @@ router.post(
       const newStandardMajorIds = new Set(
         newMajorsFromRequest
           .map((major) => major.id)
-          .filter((id) => typeof id === "number")
+          .filter((id) => typeof id === "number"),
       );
 
       // Ambil semua jurusan yang saat ini terdaftar untuk kampus ini
@@ -2198,15 +1985,15 @@ router.post(
         select: { id_standard_major: true },
       });
       const existingStandardMajorIds = new Set(
-        existingMajors.map((major) => major.id_standard_major)
+        existingMajors.map((major) => major.id_standard_major),
       );
 
       // Tentukan jurusan mana yang akan ditambahkan dan dihapus
       const idsToAdd = [...newStandardMajorIds].filter(
-        (id) => !existingStandardMajorIds.has(id)
+        (id) => !existingStandardMajorIds.has(id),
       );
       const idsToRemove = [...existingStandardMajorIds].filter(
-        (id) => !newStandardMajorIds.has(id)
+        (id) => !newStandardMajorIds.has(id),
       );
 
       // Gunakan transaksi untuk memastikan semua operasi berhasil atau tidak sama sekali
@@ -2248,7 +2035,7 @@ router.post(
         error: error.message,
       });
     }
-  }
+  },
 );
 
 // =======================================================================
@@ -2331,11 +2118,11 @@ router.get(
 
       formattedData.logo_url = formatPathToUrl(
         formattedData.path_logo,
-        BASE_URL
+        BASE_URL,
       );
       formattedData.banner_url = formatPathToUrl(
         formattedData.path_banner,
-        BASE_URL
+        BASE_URL,
       );
       delete formattedData.path_logo;
       delete formattedData.path_banner;
@@ -2352,7 +2139,7 @@ router.get(
         error: error.message,
       });
     }
-  }
+  },
 );
 
 // =======================================================================
@@ -2373,7 +2160,7 @@ const campusImageStorage = multer.diskStorage({
       null,
       `campus-${file.fieldname}-` +
         uniqueSuffix +
-        path.extname(file.originalname)
+        path.extname(file.originalname),
     );
   },
 });
@@ -2384,7 +2171,7 @@ const uploadCampusImages = multer({
   fileFilter: (req, file, cb) => {
     const fileTypes = /jpeg|jpg|png|gif/;
     const extname = fileTypes.test(
-      path.extname(file.originalname).toLowerCase()
+      path.extname(file.originalname).toLowerCase(),
     );
     const mimetype = fileTypes.test(file.mimetype);
     if (mimetype && extname) return cb(null, true);
@@ -2494,7 +2281,7 @@ router.put(
         error: error.message,
       });
     }
-  }
+  },
 );
 
 // =======================================================================
@@ -2554,7 +2341,7 @@ router.put(
         error: error.message,
       });
     }
-  }
+  },
 );
 
 // =======================================================================
@@ -2624,7 +2411,7 @@ router.put(
         error: error.message,
       });
     }
-  }
+  },
 );
 
 // =======================================================================
@@ -2695,7 +2482,7 @@ router.delete(
         error: error.message,
       });
     }
-  }
+  },
 );
 
 // =======================================================================
@@ -2819,7 +2606,7 @@ router.post(
         error: error.message,
       });
     }
-  }
+  },
 );
 
 // =======================================================================
@@ -2915,7 +2702,7 @@ router.put(
         req.files.forEach((file) => {
           // Fieldname format: new_resources[0][file]
           const match = file.fieldname.match(
-            /^new_resources\[(\d+)\]\[file\]$/
+            /^new_resources\[(\d+)\]\[file\]$/,
           );
           if (match) {
             setResourceData(match[1], "file", file);
@@ -2926,7 +2713,7 @@ router.put(
       const newResources = Object.values(newResourcesMap);
       // Filter resource yang memiliki type ATAU memiliki file (jika type lupa dikirim)
       const validNewResources = newResources.filter(
-        (res) => res.type || res.file
+        (res) => res.type || res.file,
       );
       // console.log("New Resources Parsed:", validNewResources);
 
@@ -2938,11 +2725,11 @@ router.put(
       if (req.body.kept_resource_ids) {
         if (Array.isArray(req.body.kept_resource_ids)) {
           keptResourceIds = req.body.kept_resource_ids.map((id) =>
-            parseInt(id, 10)
+            parseInt(id, 10),
           );
         } else if (typeof req.body.kept_resource_ids === "object") {
           keptResourceIds = Object.values(req.body.kept_resource_ids).map(
-            (id) => parseInt(id, 10)
+            (id) => parseInt(id, 10),
           );
         } else {
           keptResourceIds = [parseInt(req.body.kept_resource_ids, 10)];
@@ -2985,7 +2772,7 @@ router.put(
                 const existingRes = materi.materi_resource.find(
                   (r) =>
                     r.type === "file" &&
-                    normalizeResourcePath(r.path_file) === normalizedUrl
+                    normalizeResourcePath(r.path_file) === normalizedUrl,
                 );
 
                 if (existingRes) {
@@ -3043,7 +2830,7 @@ router.put(
 
       // ID resource yang akan DIHAPUS
       const resourcesToDeleteIds = existingResourceIds.filter(
-        (id) => !keptResourceIds.includes(id)
+        (id) => !keptResourceIds.includes(id),
       );
 
       // Cek Batas Maksimal Resource (Max 3)
@@ -3060,24 +2847,24 @@ router.put(
       // Refactor: Jangan hapus data di database jika file yang sama ditambahkan lagi (Rescue logic)
       const newResourcePaths = resourcesToCreate.map((r) => r.path_file);
       const resourcesToDelete = materi.materi_resource.filter((r) =>
-        resourcesToDeleteIds.includes(r.id)
+        resourcesToDeleteIds.includes(r.id),
       );
 
       const idsToRescue = resourcesToDelete
         .filter(
-          (r) => r.type === "file" && newResourcePaths.includes(r.path_file)
+          (r) => r.type === "file" && newResourcePaths.includes(r.path_file),
         )
         .map((r) => r.id);
 
       const finalResourcesToDeleteIds = resourcesToDeleteIds.filter(
-        (id) => !idsToRescue.includes(id)
+        (id) => !idsToRescue.includes(id),
       );
 
       // Hapus file fisik untuk resource yang akan dihapus (hanya tipe 'file')
       // Dilakukan setelah validasi resource baru untuk memastikan file tidak sedang digunakan ulang
       if (finalResourcesToDeleteIds.length > 0) {
         const deletedFileResources = materi.materi_resource.filter(
-          (r) => r.type === "file" && finalResourcesToDeleteIds.includes(r.id)
+          (r) => r.type === "file" && finalResourcesToDeleteIds.includes(r.id),
         );
 
         for (const res of deletedFileResources) {
@@ -3091,7 +2878,7 @@ router.put(
 
           // Cek apakah file ini digunakan oleh resource yang baru akan dibuat (resourcesToCreate)
           const isReusedInNew = resourcesToCreate.some(
-            (newRes) => newRes.path_file === res.path_file
+            (newRes) => newRes.path_file === res.path_file,
           );
 
           if (
@@ -3129,7 +2916,7 @@ router.put(
         transactionQueries.push(
           prisma.materi_resource.createMany({
             data: resourcesToCreate,
-          })
+          }),
         );
       }
 
@@ -3153,7 +2940,7 @@ router.put(
         error: error.message,
       });
     }
-  }
+  },
 );
 
 // =======================================================================
@@ -3235,7 +3022,7 @@ router.delete(
         error: error.message,
       });
     }
-  }
+  },
 );
 
 // send message to mentee
@@ -3353,7 +3140,7 @@ router.post(
         error: error.message,
       });
     }
-  }
+  },
 );
 
 // send bulk message to mentees
@@ -3432,7 +3219,7 @@ router.post(
         error: error.message,
       });
     }
-  }
+  },
 );
 
 // =======================================================================
@@ -3533,7 +3320,7 @@ router.get(
         (item) => ({
           status: item.education_status,
           total: item._count.education_status,
-        })
+        }),
       );
 
       return res.status(200).json({
@@ -3555,7 +3342,7 @@ router.get(
         error: error.message,
       });
     }
-  }
+  },
 );
 
 // =======================================================================
@@ -3626,7 +3413,7 @@ router.get(
         error: error.message,
       });
     }
-  }
+  },
 );
 
 // test midleware
@@ -3647,7 +3434,7 @@ router.post(
         error: error.message,
       });
     }
-  }
+  },
 );
 
 export default router;
