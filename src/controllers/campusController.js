@@ -91,3 +91,20 @@ export const getAllProgramByCampusId = async (req, res, next) => {
     next(error);
   }
 };
+
+// get detail program
+export const getDetailProgram = async (req, res, next) => {
+  try {
+    const idCampus = req.user.id;
+    const idProgram = req.params.id;
+
+    const result = await campusService.getDetailProgram(idCampus, idProgram);
+
+    res.status(200).json({
+      message: result.message,
+      data: result.data,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
