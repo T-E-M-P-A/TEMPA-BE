@@ -60,3 +60,18 @@ export const checkVerificationCampus = async (req, res, next) => {
     next(error);
   }
 };
+
+// get detail verification campus (For Edit Form)
+export const getDetailVerificationCampus = async (req, res, next) => {
+  try {
+    const idCampus = req.user.id;
+    const result = await campusService.getDetailVerificationCampus(idCampus);
+
+    res.status(200).json({
+      message: result.message,
+      data: result.data,
+    });
+  } catch (error) {
+    next(error);
+  }
+};

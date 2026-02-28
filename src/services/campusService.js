@@ -329,3 +329,34 @@ export const checkVerificationCampus = async (idCampus) => {
     data: getVerification,
   };
 };
+
+// get detail verification campus (For Edit Form)
+export const getDetailVerificationCampus = async (idCampus) => {
+  const campus = await prisma.campus.findUnique({
+    where: {
+      id: idCampus,
+    },
+    select: {
+      id: true,
+      campus_name: true,
+      email_campus: true,
+      description: true,
+      website_campus: true,
+      province: true,
+      city: true,
+      subdistrict: true,
+      ward: true,
+      lat: true,
+      lng: true,
+    },
+  });
+
+  if (!campus) {
+    throw new AppError("Data kampus tidak ditemukan.", 404);
+  }
+
+  return {
+    message: "Detail kampus berhasil diambil",
+    data: campus,
+  };
+};
