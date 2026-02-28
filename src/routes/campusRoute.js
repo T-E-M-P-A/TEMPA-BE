@@ -160,46 +160,12 @@ router.put(
   campusController.editDataCampus,
 );
 
-// =======================================================================
-// 3. CHECK VERIFICATION STATUS CAMPUS
-// =======================================================================
+// check verification campus
 router.get(
   "/check-verification-status",
   authenticateUser,
   authorizeRoles(["campus"]),
-  async (req, res) => {
-    const idCampus = req.user.id;
-
-    try {
-      const getVerification = await prisma.campus.findFirst({
-        where: {
-          id: idCampus,
-        },
-        select: {
-          verification_status: true,
-        },
-      });
-
-      console.log(getVerification);
-
-      if (!getVerification) {
-        return res.status(404).json({
-          message: "Data kampus tidak ditemukan.",
-        });
-      }
-
-      return res.status(200).json({
-        message: "Data berhasil didapatkan",
-        data: getVerification,
-      });
-    } catch (error) {
-      console.error("Error fetching verification status:", error);
-      return res.status(500).json({
-        message: "Terjadi kesalahan server.",
-        error: error.message,
-      });
-    }
-  },
+  campusController.checkVerificationCampus,
 );
 
 // =======================================================================

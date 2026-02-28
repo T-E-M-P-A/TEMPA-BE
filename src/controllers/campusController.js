@@ -45,3 +45,18 @@ export const editDataCampus = async (req, res, next) => {
     next(error);
   }
 };
+
+// check verification campus
+export const checkVerificationCampus = async (req, res, next) => {
+  try {
+    const idCampus = req.user.id;
+    const result = await campusService.checkVerificationCampus(idCampus);
+
+    res.status(200).json({
+      message: result.message,
+      data: result.data,
+    });
+  } catch (error) {
+    next(error);
+  }
+};

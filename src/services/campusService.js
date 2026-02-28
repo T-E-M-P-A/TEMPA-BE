@@ -306,3 +306,26 @@ export const editDataCampus = async (reqBody, idCampus) => {
     }
   }
 };
+
+// check verification campus
+export const checkVerificationCampus = async (idCampus) => {
+  const getVerification = await prisma.campus.findFirst({
+    where: {
+      id: idCampus,
+    },
+    select: {
+      verification_status: true,
+    },
+  });
+
+  // console.log(getVerification);
+
+  if (!getVerification) {
+    throw new AppError("Data kampus tidak ditemukan.", 404);
+  }
+
+  return {
+    message: "Data berhasil didapatkan",
+    data: getVerification,
+  };
+};
