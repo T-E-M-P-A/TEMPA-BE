@@ -202,3 +202,107 @@ export const registerCampus = async (reqBody, idCampus) => {
     }
   }
 };
+
+// edit data campus
+export const editDataCampus = async (reqBody, idCampus) => {
+  const {
+    campusName,
+    emailCampus,
+    description,
+    websiteCampus,
+    province,
+    city,
+    subdistrict,
+    ward,
+    lat,
+    lng,
+  } = reqBody;
+
+  const requiredFields = [
+    "campusName",
+    "emailCampus",
+    "description",
+    "websiteCampus",
+    "province",
+    "city",
+    "subdistrict",
+    "ward",
+    "lat",
+    "lng",
+  ];
+
+  // check if req is null
+  for (const field of requiredFields) {
+    const value = reqBody[field];
+
+    if (
+      value === undefined ||
+      value === null ||
+      (typeof value === "string" && value.trim() === "")
+    ) {
+      throw new AppError(
+        `Gagal: Kolom '${field}' wajib diisi dan tidak boleh kosong.`,
+        400,
+      );
+    }
+  }
+
+  // check format email
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  if (!emailRegex.test(emailCampus)) {
+    throw new AppError("Gagal: Format email tidak valid.", 400);
+  }
+
+  try {
+    // convertion to float
+    const parsedLat = parseFloat(lat);
+    const parsedLng = parseFloat(lng);
+
+    // check if lat and lng value is float
+    if (isNaN(parsedLat) || isNaN(parsedLng)) {
+      throw new AppError(
+        "Gagal: Latitude (lat) dan Longitude (lng) harus berupa angka yang valid.",
+        400,
+      );
+    }
+
+    // Update data detail kampus
+    const updateDataCampus = await prisma.campus.update({
+      where: {
+        id: idCampus,
+      },
+      data: {
+        campus_name: campusName,
+        email_campus: emailCampus,
+        description: description,
+        website_campus: websiteCampus,
+        province: province,
+        city: city,
+        subdistrict: subdistrict,
+        ward: ward,
+        lat: parsedLat,
+        lng: parsedLng,
+        verification_status: "pending",
+      },
+    });
+
+    return {
+      message: "Data kampus berhasil diperbarui",
+      data: updateDataCampus,
+    };
+  } catch (error) {
+    console.error("Prisma Error:", error);
+
+    // error unique email
+    if (error.code === "P2002") {
+      throw new AppError(
+        "Email kampus sudah terdaftar (pelanggaran unik).",
+        409,
+      );
+    }
+    // error validation input
+    if (error.name === "PrismaClientValidationError") {
+      throw new AppError("Kesalahan validasi input data.", 400);
+    }
+  }
+};

@@ -30,3 +30,18 @@ export const registerCampus = async (req, res, next) => {
     next(error);
   }
 };
+
+// edit data campus
+export const editDataCampus = async (req, res, next) => {
+  try {
+    const idCampus = req.user.id;
+    const result = await campusService.editDataCampus(req.body, idCampus);
+
+    res.status(200).json({
+      message: result.message,
+      data: result.data,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
