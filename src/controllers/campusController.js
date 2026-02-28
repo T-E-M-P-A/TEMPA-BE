@@ -128,6 +128,7 @@ export const getAllMenteeWhereRegisteredProgram = async (req, res, next) => {
   }
 };
 
+// get program feedback
 export const getProgramFeedback = async (req, res, next) => {
   try {
     const idCampus = req.user.id;
@@ -139,6 +140,19 @@ export const getProgramFeedback = async (req, res, next) => {
       message: result.message,
       data: result.data,
     });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const getNameCampus = async (req, res, next) => {
+  try {
+    const { campusName } = req.params;
+
+    const result = await campusService.getNameCampus(campusName);
+    // console.log(result);
+
+    return res.json(result);
   } catch (error) {
     next(error);
   }

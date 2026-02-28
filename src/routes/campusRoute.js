@@ -208,74 +208,8 @@ router.get(
   campusController.getProgramFeedback,
 );
 
-// =======================================================================
-// 7. GET DATA CAMPUS FOR VALIDATION (Menggunakan Python)
-// =======================================================================
-router.get("/validate-campus/:campusName", (req, res) => {
-  const { campusName } = req.params;
-
-  if (!campusName) {
-    return res
-      .status(400)
-      .json({ status: "error", message: 'Parameter "campusName" diperlukan.' });
-  }
-
-  // Gunakan spawn untuk menjalankan proses Python
-  const pythonProcess = spawn(PYTHON_VENV_PATH, [
-    PYTHON_SCRIPT_PATH,
-    campusName, // Argumen untuk Python
-  ]);
-
-  let outputData = "";
-  let errorData = "";
-
-  // Tangkap output (stdout) dari skrip Python
-  pythonProcess.stdout.on("data", (data) => {
-    outputData += data.toString();
-  });
-
-  // Tangkap error (stderr) dari skrip Python
-  pythonProcess.stderr.on("data", (data) => {
-    errorData += data.toString();
-  });
-
-  // Tangani penutupan proses
-  pythonProcess.on("close", (code) => {
-    if (code !== 0) {
-      console.error(
-        `Python script exited with code ${code}. Stderr: ${errorData}`,
-      );
-      // Coba parse outputData jika berisi error JSON dari Python
-      try {
-        const errorResult = JSON.parse(outputData);
-        if (errorResult.status === "error") {
-          return res.status(500).json(errorResult);
-        }
-      } catch (e) {
-        // Jika output bukan JSON error, kirim pesan error generik
-        return res.status(500).json({
-          status: "error",
-          message: "Gagal menjalankan validasi kampus (Internal Server Error).",
-        });
-      }
-    }
-
-    try {
-      // Parse output JSON dari Python
-      const result = JSON.parse(outputData);
-      console.log(result);
-
-      // Kirim hasil ke frontend
-      return res.json(result);
-    } catch (e) {
-      console.error("Failed to parse Python output:", outputData);
-      return res.status(500).json({
-        status: "error",
-        message: "Gagal memproses hasil dari Python.",
-      });
-    }
-  });
-});
+// get campus name for validation (use api from python)
+router.get("/validate-campus/:campusName", campusController.getNameCampus);
 
 // =======================================================================
 // 7.1. GET DATA MENTOR FOR VALIDATION (Menggunakan Python)

@@ -4,12 +4,53 @@ import { OAuth2Client } from "google-auth-library";
 import jwt from "jsonwebtoken";
 import { AppError } from "../utils/customError.js";
 import formatPathToUrl from "../controllers/formatPathUrl.js";
+import path, { dirname } from "path";
+import { fileURLToPath } from "url";
+import { spawn } from "child_process";
 
 const CLIENT_ID = process.env.CLIENT_ID;
 const client = new OAuth2Client(CLIENT_ID);
 
 const JWT_SECRET = process.env.JWT_SECRET;
 const BASE_URL = process.env.API_BASE_URL;
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+
+// root proyek (TEMPA-BE)
+const PROJECT_ROOT = path.join(__dirname, "..", "..");
+
+// Path to Interpreter Python VENV (Windows)
+// const PYTHON_VENV_PATH = path.join(
+//   PROJECT_ROOT,
+//   "venv_pddikti",
+//   "Scripts",
+//   "python.exe"
+// );
+
+// uncomment if your system is linux or macos
+const PYTHON_VENV_PATH = path.join(
+  PROJECT_ROOT,
+  "venv_pddikti",
+  "bin",
+  "python3",
+);
+
+// Path Script Python
+const PYTHON_SCRIPT_PATH = path.join(
+  PROJECT_ROOT,
+  "src",
+  "controllers",
+  "dataCampus.py",
+);
+
+// Path Script Python untuk Mentor
+const PYTHON_MENTOR_SCRIPT_PATH = path.join(
+  PROJECT_ROOT,
+  "src",
+  "controllers",
+  "dataMentor.py",
+);
 
 // oauth login campus
 export const loginCampus = async (token) => {
@@ -755,4 +796,63 @@ export const getProgramFeedback = async (idCampus, idProgram) => {
     message: "Data feedback program berhasil diambil.",
     data: formattedFeedbacks,
   };
+};
+
+// get campus name from api
+export const getNameCampus = async (campusName) => {
+  if (!campusName) {
+    throw new AppError("Parameter 'campusName' diperlukan.", 400);
+  }
+
+  // Gunakan spawn untuk menjalankan proses Python
+  return new Promise((resolve, reject) => {
+    const pythonProcess = spawn(PYTHON_VENV_PATH, [
+      PYTHON_SCRIPT_PATH,
+      campusName,
+    ]);
+
+    let outputData = "";
+    let errorData = "";
+
+    pythonProcess.stdout.on("data", (data) => {
+      outputData += data.toString();
+    });
+
+    pythonProcess.stderr.on("data", (data) => {
+      errorData += data.toString();
+    });
+
+    pythonProcess.on("close", (code) => {
+      if (code !== 0) {
+        console.error(
+          `Python script exited code ${code}. Stderr: ${errorData}`,
+        );
+
+        try {
+          const errorResult = JSON.parse(outputData);
+          // Gunakan reject bukan throw di dalam callback Promise
+          return reject(
+            new AppError(errorResult.message || "Internal Server Error", 500),
+          );
+        } catch (e) {
+          return reject(
+            new AppError("Gagal menjalankan validasi kampus.", 500),
+          );
+        }
+      }
+
+      try {
+        const result = JSON.parse(outputData);
+        // resolve akan mengirim data kembali ke Controller
+        resolve(result);
+      } catch (e) {
+        reject(new AppError("Gagal memproses hasil dari Python.", 500));
+      }
+    });
+
+    // Tangani jika proses python gagal dijalankan sama sekali (misal path salah)
+    pythonProcess.on("error", (err) => {
+      reject(new AppError(`Gagal menjalankan Python: ${err.message}`, 500));
+    });
+  });
 };
