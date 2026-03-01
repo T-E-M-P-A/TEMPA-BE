@@ -1014,7 +1014,158 @@ export const createProgram = async (reqBody, idCampus, reqFile) => {
       fs.unlinkSync(reqFile.path);
     }
 
-    // RE-THROW ERROR: Penting agar ditangkap Controller!
+    if (error instanceof AppError) throw error;
+    throw new AppError(error.message || "Gagal membuat program.", 500);
+  }
+};
+
+export const updateProgram = async (idCampus, id, reqBody, reqFile) => {
+  const idProgram = parseInt(id, 10);
+
+  if (isNaN(idProgram)) {
+    throw new AppError("ID Program tidak valid. Harus berupa angka.", 400);
+  }
+
+  const {
+    name,
+    majorName, // Ini adalah ID jurusan
+    programType,
+    visibility,
+    startRegisDate,
+    endRegisDate,
+    startDateProgram,
+    endDateProgram,
+    startTime,
+    endTime,
+    capacity,
+    description,
+    benefits,
+    terms,
+    onsiteLocationName,
+    mapLat,
+    mapLng,
+  } = reqBody;
+  // console.log(req.body);
+  try {
+    // 1. Cari program yang akan di-edit untuk verifikasi dan mendapatkan path gambar lama
+    const existingProgram = await prisma.program.findFirst({
+      where: {
+        id: idProgram,
+        id_campus: idCampus, // Pastikan program milik kampus yang sedang login
+      },
+    });
+
+    if (!existingProgram) {
+      throw new AppError(
+        "Program tidak ditemukan atau Anda tidak berhak mengeditnya.",
+        404,
+      );
+    }
+
+    // 2. Validasi Major ID baru (jika diubah)
+    const majorId = parseInt(majorName, 10);
+    // console.log(majorName);
+    if (isNaN(majorId)) {
+      throw new AppError("Format ID Jurusan tidak valid.", 400);
+    }
+
+    const major = await prisma.major.findFirst({
+      where: {
+        id_campus: parseInt(idCampus),
+        OR: [{ id: majorId }, { id_standard_major: majorId }],
+      },
+    });
+
+    // console.log(`id jurusan: ${majorId}, id campus: ${idCampus}`);
+    // console.log(major);
+
+    if (!major) {
+      throw new AppError("Jurusan tidak ditemukan atau bukan milik Anda.", 404);
+    }
+
+    // Helper untuk menangani field yang bisa berupa string atau array dari FormData
+    const processMultiPartArray = (field) => {
+      if (!field) return [];
+      if (Array.isArray(field)) return field.map((item) => item.trim());
+      return [field.trim()];
+    };
+
+    // 3. Siapkan data yang akan di-update
+    const dataToUpdate = {
+      program_name: name,
+      id_major: majorId,
+      type_sesi: programType,
+      visibility: visibility,
+      start_regis_date: new Date(startRegisDate),
+      end_regis_date: new Date(endRegisDate),
+      start_program_date: new Date(startDateProgram),
+      end_program_date: new Date(endDateProgram),
+      sesi_start: new Date(`1970-01-01T${startTime}:00`),
+      sesi_end: new Date(`1970-01-01T${endTime}:00`),
+      capacity: parseInt(capacity, 10),
+      description: description,
+      benefit: processMultiPartArray(benefits),
+      terms_and_conditions: processMultiPartArray(terms),
+      update_at: new Date(),
+    };
+
+    // 4. Handle upload gambar baru (jika ada)
+    if (reqFile) {
+      // Hapus gambar lama jika ada
+      if (existingProgram.path_gambar) {
+        const oldImagePath = path.join(
+          process.cwd(),
+          existingProgram.path_gambar,
+        );
+        if (fs.existsSync(oldImagePath)) {
+          fs.unlink(oldImagePath, (err) => {
+            if (err)
+              console.error("Gagal menghapus gambar lama:", oldImagePath, err);
+            else console.log("Gambar lama berhasil dihapus:", oldImagePath);
+          });
+        }
+      }
+      // Tambahkan path gambar baru ke data yang akan di-update
+      dataToUpdate.path_gambar = reqFile.path.replace(/\\/g, "/");
+    }
+
+    // 5. Handle data kondisional untuk program 'onsite'
+    if (programType === "onsite") {
+      const parsedLat = parseFloat(mapLat);
+      const parsedLng = parseFloat(mapLng);
+
+      if (!onsiteLocationName || isNaN(parsedLat) || isNaN(parsedLng)) {
+        throw new AppError(
+          "Untuk program onsite, nama lokasi, latitude, dan longitude wajib diisi.",
+          400,
+        );
+      }
+      dataToUpdate.onsiteLocationName = onsiteLocationName;
+      dataToUpdate.lat = parsedLat;
+      dataToUpdate.lng = parsedLng;
+    } else {
+      // Jika tipe program diubah dari onsite ke online, hapus data lokasi
+      dataToUpdate.onsiteLocationName = null;
+      dataToUpdate.lat = null;
+      dataToUpdate.lng = null;
+    }
+
+    // 6. Lakukan update di database
+    const updatedProgram = await prisma.program.update({
+      where: { id: idProgram },
+      data: dataToUpdate,
+    });
+
+    return {
+      message: "Program berhasil diperbarui.",
+      data: updatedProgram,
+    };
+  } catch (error) {
+    // HAPUS FILE JIKA GAGAL DB
+    if (reqFile && fs.existsSync(reqFile.path)) {
+      fs.unlinkSync(reqFile.path);
+    }
+
     if (error instanceof AppError) throw error;
     throw new AppError(error.message || "Gagal membuat program.", 500);
   }

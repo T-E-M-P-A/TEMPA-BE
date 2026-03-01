@@ -191,3 +191,22 @@ export const createProgram = async (req, res, next) => {
     next(error);
   }
 };
+
+// update program
+export const updateProgram = async (req, res, next) => {
+  try {
+    const idCampus = req.user.id;
+    const { id } = req.params;
+
+    const result = await campusService.updateProgram(
+      idCampus,
+      id,
+      req.body,
+      req.file,
+    );
+
+    return res.status(200).json(result);
+  } catch (error) {
+    next(error);
+  }
+};
