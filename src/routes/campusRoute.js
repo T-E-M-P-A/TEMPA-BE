@@ -15,6 +15,7 @@ import bcrypt from "bcrypt";
 import nodemailer from "nodemailer";
 import mailQueue from "../lib/mailQueue.js";
 import * as campusController from "../controllers/campusController.js";
+import generateCertificateQueue from "../lib/generateCertificate.js";
 
 const router = express.Router();
 
@@ -306,6 +307,21 @@ router.delete(
   authenticateUser,
   authorizeRoles(["campus"]),
   campusController.deleteProgram,
+);
+
+// 3. Endpoint Express
+router.post(
+  "/generate-certificate",
+  authenticateUser,
+  authorizeRoles(["campus"]),
+  async (req, res) => {
+    const { name } = req.body;
+
+    // Masukkan ke antrean tanpa menunggu proses selesai (background)
+    generateCertificateQueue.push({ name }).catch((err) => console.error(err));
+
+    res.send({ status: "Sertifikat Anda sedang diproses di background." });
+  },
 );
 
 // get major for form major
