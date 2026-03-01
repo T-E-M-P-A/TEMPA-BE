@@ -210,3 +210,17 @@ export const updateProgram = async (req, res, next) => {
     next(error);
   }
 };
+
+// delete program
+export const deleteProgram = async (req, res, next) => {
+  try {
+    const idCampus = req.user.id;
+    const { id } = req.params;
+
+    const result = await campusService.deleteProgram(idCampus, id);
+
+    return res.status(200).json(result);
+  } catch (error) {
+    next(error);
+  }
+};

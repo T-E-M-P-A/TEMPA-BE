@@ -1019,6 +1019,7 @@ export const createProgram = async (reqBody, idCampus, reqFile) => {
   }
 };
 
+// update program
 export const updateProgram = async (idCampus, id, reqBody, reqFile) => {
   const idProgram = parseInt(id, 10);
 
@@ -1169,4 +1170,68 @@ export const updateProgram = async (idCampus, id, reqBody, reqFile) => {
     if (error instanceof AppError) throw error;
     throw new AppError(error.message || "Gagal membuat program.", 500);
   }
+};
+
+// delete program
+export const deleteProgram = async (idCampus, id) => {
+  const idProgram = parseInt(id);
+
+  // console.log(`ID Program: ${idProgram}, ID Campus: ${idCampus}`);
+
+  // Validasi ID program
+  if (isNaN(idProgram)) {
+    throw new AppError("ID Program tidak valid. Harus berupa angka.", 400);
+  }
+
+  // 1. Cari program untuk verifikasi kepemilikan dan mendapatkan path gambar
+  const programToDelete = await prisma.program.findFirst({
+    where: {
+      id: idProgram,
+      id_campus: idCampus, // Pastikan program milik kampus yang login
+    },
+    select: {
+      path_gambar: true,
+    },
+  });
+
+  // Jika program tidak ditemukan atau bukan milik kampus ini
+  if (!programToDelete) {
+    throw new AppError("Program tidak ditemukan atau bukan milik Anda.", 404);
+  }
+
+  // 2. Hapus file gambar jika ada
+  if (programToDelete.path_gambar) {
+    // process.cwd() akan mengarah ke root proyek: /home/apipi/Pbl Sem-5/TEMPA-BE
+    const imagePath = path.join(process.cwd(), programToDelete.path_gambar);
+
+    // Cek apakah file ada sebelum mencoba menghapus
+    if (fs.existsSync(imagePath)) {
+      fs.unlink(imagePath, (err) => {
+        if (err) {
+          // Log error jika gagal menghapus file, tapi lanjutkan proses
+          console.error(`Gagal menghapus file gambar: ${imagePath}`, err);
+        } else {
+          console.log(`File gambar berhasil dihapus: ${imagePath}`);
+        }
+      });
+    }
+  }
+
+  // 3. Hapus relasi program_mentor terlebih dahulu (karena constraint NoAction)
+  await prisma.program_mentor.deleteMany({
+    where: {
+      id_program: idProgram,
+    },
+  });
+
+  // 4. Hapus program dari database
+  await prisma.program.delete({
+    where: {
+      id: idProgram,
+    },
+  });
+
+  return {
+    message: `Program dengan ID ${idProgram} berhasil dihapus.`,
+  };
 };

@@ -300,90 +300,12 @@ router.put(
   campusController.updateProgram,
 );
 
-// =======================================================================
-// 8. DELETE PROGRAM BY ID
-// =======================================================================
+// delete program
 router.delete(
   "/delete-program/:id",
   authenticateUser,
   authorizeRoles(["campus"]),
-  async (req, res) => {
-    const idCampus = req.user.id;
-    const { id } = req.params;
-    const idProgram = parseInt(id);
-
-    console.log(`ID Program: ${idProgram}, ID Campus: ${idCampus}`);
-
-    // Validasi ID program
-    if (isNaN(idProgram)) {
-      return res.status(400).json({
-        message: "ID Program tidak valid. Harus berupa angka.",
-      });
-    }
-
-    try {
-      // 1. Cari program untuk verifikasi kepemilikan dan mendapatkan path gambar
-      const programToDelete = await prisma.program.findFirst({
-        where: {
-          id: idProgram,
-          id_campus: idCampus, // Pastikan program milik kampus yang login
-        },
-        select: {
-          path_gambar: true,
-        },
-      });
-
-      // Jika program tidak ditemukan atau bukan milik kampus ini
-      if (!programToDelete) {
-        return res.status(404).json({
-          message:
-            "Program tidak ditemukan atau Anda tidak berhak menghapusnya.",
-        });
-      }
-
-      // 2. Hapus file gambar jika ada
-      if (programToDelete.path_gambar) {
-        // process.cwd() akan mengarah ke root proyek: /home/apipi/Pbl Sem-5/TEMPA-BE
-        const imagePath = path.join(process.cwd(), programToDelete.path_gambar);
-
-        // Cek apakah file ada sebelum mencoba menghapus
-        if (fs.existsSync(imagePath)) {
-          fs.unlink(imagePath, (err) => {
-            if (err) {
-              // Log error jika gagal menghapus file, tapi lanjutkan proses
-              console.error(`Gagal menghapus file gambar: ${imagePath}`, err);
-            } else {
-              console.log(`File gambar berhasil dihapus: ${imagePath}`);
-            }
-          });
-        }
-      }
-
-      // 3. Hapus relasi program_mentor terlebih dahulu (karena constraint NoAction)
-      await prisma.program_mentor.deleteMany({
-        where: {
-          id_program: idProgram,
-        },
-      });
-
-      // 4. Hapus program dari database
-      await prisma.program.delete({
-        where: {
-          id: idProgram,
-        },
-      });
-
-      return res.status(200).json({
-        message: `Program dengan ID ${idProgram} berhasil dihapus.`,
-      });
-    } catch (error) {
-      console.error("Gagal menghapus program:", error);
-      return res.status(500).json({
-        message: "Terjadi kesalahan server saat menghapus program.",
-        error: error.message,
-      });
-    }
-  },
+  campusController.deleteProgram,
 );
 
 // get major for form major
