@@ -22,6 +22,15 @@ const __dirname = path.dirname(__filename);
 
 // --- MIDDLEWARE ---
 
+app.use(
+  cors({
+    origin: "http://localhost:5173",
+    methods: ["GET", "POST", "PUT", "DELETE"], // Tambahkan untuk keamanan
+    credentials: true,
+    // "https://tempa.ddnsking.com"
+  }),
+);
+
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   limit: (req, res) => {
@@ -46,12 +55,6 @@ app.use(
 app.use(morgan("dev"));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
-app.use(
-  cors({
-    origin: "http://localhost:5173",
-    // "https://tempa.ddnsking.com"
-  }),
-);
 
 app.use("/public", express.static(path.join(process.cwd(), "uploads")));
 

@@ -113,7 +113,11 @@ export const getProgramMentee = async (menteeId) => {
 
   // if program null
   if (results.length === 0) {
-    throw new AppError("Mentee belum terdaftar di program manapun.", 404);
+    return {
+      message: "Mentee belum terdaftar di program manapun.",
+      data: [],
+      major_interest_status: false,
+    };
   }
 
   const programs = menteeProgressWithProgram.map((item) => {

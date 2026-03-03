@@ -315,12 +315,51 @@ router.post(
   authenticateUser,
   authorizeRoles(["campus"]),
   async (req, res) => {
-    const { name } = req.body;
+    const idCampus = req.user.id;
+    const { menteeList } = req.body;
 
-    // Masukkan ke antrean tanpa menunggu proses selesai (background)
-    generateCertificateQueue.push({ name }).catch((err) => console.error(err));
+    // get name and email mentee
+    const mentees = await prisma.mentee.findMany({
+      where: {
+        id: {
+          in: menteeList,
+        },
+      },
+      select: {
+        username: true,
+        email: true,
+      },
+    });
 
-    res.send({ status: "Sertifikat Anda sedang diproses di background." });
+    // get campus name
+    const campus = await prisma.campus.findUnique({
+      where: {
+        id: idCampus,
+      },
+      select: {
+        campus_name: true,
+      },
+    });
+
+    // console.log(mentees.length);
+    const campusName = campus?.campus_name || "Campus Team";
+
+    mentees.forEach((mentee) => {
+      // send object mentee to queue
+      generateCertificateQueue
+        .push({
+          ...mentee,
+          campusName: campusName,
+        })
+        .catch((err) =>
+          console.error(`Gagal masuk antrean untuk ${mentee.name}:`, err),
+        );
+    });
+
+    res.send({
+      status: "success",
+      message: `${mentees.length} sertifikat sedang diproses di background.`,
+    });
   },
 );
 
