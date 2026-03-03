@@ -14,7 +14,7 @@ const transporter = nodemailer.createTransport({
 
 const worker = async (task) => {
   try {
-    // console.log(`Processing: ${task.username}`);
+    console.log(`Processing: ${task.username}`);
     // Generate PDF Bytes (Memory Only)
     const pdfBytes = await createCertificate(task.username);
     const pdfBuffer = Buffer.from(pdfBytes); // Konversi ke Node.js Buffer

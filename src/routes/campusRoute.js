@@ -309,20 +309,22 @@ router.delete(
   campusController.deleteProgram,
 );
 
-// 3. Endpoint Express
+// generate certificate
 router.post(
   "/generate-certificate",
   authenticateUser,
   authorizeRoles(["campus"]),
   async (req, res) => {
     const idCampus = req.user.id;
-    const { menteeList } = req.body;
+    const menteeId = req.body;
+
+    // console.log(menteeId);
 
     // get name and email mentee
     const mentees = await prisma.mentee.findMany({
       where: {
         id: {
-          in: menteeList,
+          in: menteeId,
         },
       },
       select: {
@@ -330,6 +332,8 @@ router.post(
         email: true,
       },
     });
+
+    // console.log(mentees);
 
     // get campus name
     const campus = await prisma.campus.findUnique({
@@ -358,7 +362,7 @@ router.post(
 
     res.send({
       status: "success",
-      message: `${mentees.length} sertifikat sedang diproses di background.`,
+      message: `${menteeId.length} sertifikat sedang diproses di background.`,
     });
   },
 );
