@@ -21,6 +21,7 @@ model mentee {
   city                  String?                  @db.VarChar(225)
   subdistrict           String?                  @db.VarChar(225)
   ward                  String?                  @db.VarChar(225)
+  mentee_attendance     mentee_attendance[]
   mentee_major_interest mentee_major_interest[]
   mentee_progress       mentee_progress[]
   program_feedback      program_feedback[]
@@ -174,6 +175,7 @@ model mentee_progress {
   id_mentee         Int
   id_program        Int
   create_at         DateTime?                         @db.Date
+  mentee_attendance mentee_attendance[]
   mentee            mentee                            @relation(fields: [id_mentee], references: [id], onDelete: Cascade, map: "mentee_progress_ibfk_1")
   program           program                           @relation(fields: [id_program], references: [id], onDelete: Cascade, map: "mentee_progress_ibfk_2")
 
@@ -324,6 +326,21 @@ model transaction {
   @@index([id_package], map: "id_package")
 }
 
+model mentee_attendance {
+  id              Int                      @id @default(autoincrement())
+  attendance_date DateTime                 @db.DateTime(0)
+  status          mentee_attendance_status
+  created_at      DateTime                 @db.Timestamp(0)
+  update_at       DateTime                 @db.Timestamp(0)
+  id_mentee       Int
+  id_program      Int
+  mentee          mentee                   @relation(fields: [id_mentee], references: [id], onDelete: Cascade, map: "mentee_attendance_ibfk_1")
+  mentee_progress mentee_progress          @relation(fields: [id_program], references: [id], onDelete: Cascade, map: "mentee_attendance_ibfk_2")
+
+  @@index([id_mentee, id_program], map: "id_mentee")
+  @@index([id_program], map: "id_program")
+}
+
 enum visibility_materi {
   private
   public
@@ -391,4 +408,9 @@ enum transaction_status {
   paid
   failed
   expired
+}
+
+enum mentee_attendance_status {
+  present
+  absent
 }
