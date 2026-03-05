@@ -186,6 +186,7 @@ export const getMateri = async (req, res, next) => {
     const idMentee = parseInt(req.user.id);
 
     const result = await menteeService.getMateri(idProgram, idMentee);
+    // console.log(result.data);
 
     res.status(200).json({
       message: result.message,

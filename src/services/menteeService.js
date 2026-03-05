@@ -857,6 +857,18 @@ export const getMateri = async (idProgram, idMentee) => {
     throw new AppError("ID Program tidak valid.", 400);
   }
 
+  const checkStatusProgram = await prisma.mentee_progress.findFirst({
+    where: {
+      id_mentee: idMentee,
+      id_program: idProgram,
+    },
+    select: {
+      completion_status: true,
+    },
+  });
+
+  // console.log(checkStatusProgram);
+
   const getProgramStatus = await prisma.mentee_progress.findFirst({
     where: {
       id_mentee: idMentee,
@@ -866,7 +878,8 @@ export const getMateri = async (idProgram, idMentee) => {
       completion_status: true,
     },
   });
-  // 1. UPDATE Kueri Prisma: Sertakan relasi 'materi_resource'
+
+  // UPDATE Kueri Prisma: Sertakan relasi 'materi_resource'
   const materiList = await prisma.materi.findMany({
     where: {
       id_program: idProgram,
@@ -881,7 +894,7 @@ export const getMateri = async (idProgram, idMentee) => {
           end_program_date: true,
         },
       },
-      // Sertakan semua resource (file/video/kuis) untuk setiap materi
+
       materi_resource: true,
     },
     orderBy: {
@@ -889,20 +902,42 @@ export const getMateri = async (idProgram, idMentee) => {
     },
   });
 
-  if (materiList.length === 0) {
-    // Ambil detail program secara terpisah
-    const programData = await prisma.program.findUnique({
-      where: {
-        id: idProgram,
-      },
-      select: {
-        program_name: true,
-        description: true,
-        end_program_date: true,
-        start_program_date: true,
-      },
-    });
+  // Ambil detail program secara terpisah
+  const programData = await prisma.program.findUnique({
+    where: {
+      id: idProgram,
+    },
+    select: {
+      program_name: true,
+      description: true,
+      end_program_date: true,
+      start_program_date: true,
+    },
+  });
 
+  if (checkStatusProgram.completion_status === "completed") {
+    // throw new AppError("Program sudah selesai.", 404);
+    return {
+      message: "Program Sudah Selesai.",
+      code: 404,
+      data: [
+        {
+          completion_status: getProgramStatus?.completion_status || "completed",
+          program_name: programData.program_name,
+          program_description: programData.description,
+          end_program_date: programData.end_program_date,
+          start_program_date: programData.start_program_date,
+          resources: [],
+          // Berikan properti materi minimal agar frontend bisa membaca
+          title: null,
+          description: null,
+          id: null,
+        },
+      ],
+    };
+  }
+
+  if (materiList.length === 0) {
     // Cek jika program itu sendiri tidak ditemukan
     if (!programData) {
       return res.status(404).json({
@@ -911,7 +946,7 @@ export const getMateri = async (idProgram, idMentee) => {
     }
 
     // Jika program ditemukan tapi materinya kosong, kirim detail program dengan array materi kosong
-    return res.status(200).json({
+    return {
       message: "Materi belum ditambahkan untuk program ini.",
       // Kirim data yang dibutuhkan frontend untuk header
       data: [
@@ -928,7 +963,7 @@ export const getMateri = async (idProgram, idMentee) => {
           id: null,
         },
       ],
-    });
+    };
   }
 
   // 2. UPDATE Logika Pemformatan: Pindahkan path_file ke resource
