@@ -224,3 +224,17 @@ export const deleteProgram = async (req, res, next) => {
     next(error);
   }
 };
+
+// get presensi mentee
+export const getPresensiMentee = async (req, res, next) => {
+  try {
+    const idCampus = req.user.id;
+    const idProgram = req.params.id;
+
+    const result = await campusService.getPresensiMentee(idCampus, idProgram);
+
+    return res.status(200).json(result);
+  } catch (error) {
+    next(error);
+  }
+};

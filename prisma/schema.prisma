@@ -413,4 +413,5 @@ enum transaction_status {
 enum mentee_attendance_status {
   present
   absent
+  null
 }

@@ -1235,3 +1235,42 @@ export const deleteProgram = async (idCampus, id) => {
     message: `Program dengan ID ${idProgram} berhasil dihapus.`,
   };
 };
+
+// get presensi mentee
+export const getPresensiMentee = async (idCampus, idProgram) => {
+  const parsedIdProgram = parseInt(idProgram);
+
+  const getPresensiMentee = await prisma.mentee_progress.findMany({
+    where: {
+      id_program: parsedIdProgram,
+    },
+    include: {
+      mentee_attendance: {
+        select: {
+          id: true,
+          id_mentee: true,
+          id_program: true,
+          status: true,
+          attendance_date: true,
+        },
+      },
+    },
+  });
+
+  const formatDataPresensi = getPresensiMentee.map((item) => ({
+    id_mentee: item.id_mentee,
+    id_program: item.id_program,
+
+    attendance_list: item.mentee_attendance.map((att) => ({
+      id: att.id,
+      status: att.status,
+      attendance_date: att.attendance_date,
+    })),
+  }));
+
+  // console.log(formatDataPresensi);
+  return {
+    message: "Data presensi mentee berhasil diambil",
+    data: formatDataPresensi,
+  };
+};

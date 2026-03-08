@@ -309,6 +309,13 @@ router.delete(
   campusController.deleteProgram,
 );
 
+router.get(
+  "/get-presensi-mentee/:id",
+  authenticateUser,
+  authorizeRoles(["campus"]),
+  campusController.getPresensiMentee,
+);
+
 // generate certificate
 router.post(
   "/generate-certificate",
