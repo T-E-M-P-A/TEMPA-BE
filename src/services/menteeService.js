@@ -1368,3 +1368,49 @@ export const viewsCampus = async (menteeId, idCampus) => {
 
   return { message: "Berhasil mencatat view kampus." };
 };
+
+export const getPresensi = async (programId, menteeId) => {
+  if (!programId) throw new AppError("Program tidak ditemukan", 404);
+
+  const getProgram = await prisma.program.findUnique({
+    where: {
+      id: programId,
+    },
+    select: {
+      id: true,
+      program_name: true,
+      onsiteLocationName: true,
+      type_sesi: true,
+      start_program_date: true,
+      end_program_date: true,
+    },
+  });
+
+  if (!getProgram) throw new AppError("Program tidak ditemukan", 404);
+
+  const getMenteePresensi = await prisma.mentee_progress.findFirst({
+    where: {
+      id_program: programId,
+      id_mentee: menteeId,
+    },
+  });
+
+  if (!getMenteePresensi) {
+    throw new AppError("Anda tidak terdaftar di program ini", 403);
+  }
+
+  // console.log(getProgram);
+
+  const today = new Date();
+  const endDate = new Date(getProgram.end_program_date);
+
+  // if the program is finished return null
+  if (today > endDate) {
+    throw new AppError("Program sudah berakhir", 410);
+  }
+
+  return {
+    message: "Detail program ditemukan",
+    data: getProgram,
+  };
+};

@@ -175,6 +175,13 @@ router.post(
   menteeController.addSeenCampus,
 );
 
+router.get(
+  "/mentee/presensi/:idProgram",
+  authenticateUser,
+  authorizeRoles(["mentee"]),
+  menteeController.getPresensi,
+);
+
 // test midleware
 router.post(
   "/testing-midleware-mentee",

@@ -341,3 +341,21 @@ export const addSeenCampus = async (req, res, next) => {
     next(error);
   }
 };
+
+export const getPresensi = async (req, res, next) => {
+  try {
+    const programId = parseInt(req.params.idProgram);
+    const menteeId = parseInt(req.user.id);
+
+    res.set("Cache-Control", "no-store, no-cache, must-revalidate, private");
+
+    const result = await menteeService.getPresensi(programId, menteeId);
+
+    res.status(200).json({
+      message: result.message,
+      data: result.data,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
