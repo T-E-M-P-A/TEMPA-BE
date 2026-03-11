@@ -128,7 +128,9 @@ model program {
   lat                              Float?              @db.Float
   lng                              Float?              @db.Float
   seen                             Int?                @default(0)
+  expired_presensi                 Json?
   materi                           materi[]
+  mentee_attendance                mentee_attendance[]
   mentee_progress                  mentee_progress[]
   campus_program_id_campusTocampus campus              @relation("program_id_campusTocampus", fields: [id_campus], references: [id], onDelete: Cascade, map: "program_ibfk_2")
   campus_program_id_majorTocampus  major               @relation("program_id_majorTocampus", fields: [id_major], references: [id], onDelete: Cascade, map: "program_ibfk_3")
@@ -175,7 +177,6 @@ model mentee_progress {
   id_mentee         Int
   id_program        Int
   create_at         DateTime?                         @db.Date
-  mentee_attendance mentee_attendance[]
   mentee            mentee                            @relation(fields: [id_mentee], references: [id], onDelete: Cascade, map: "mentee_progress_ibfk_1")
   program           program                           @relation(fields: [id_program], references: [id], onDelete: Cascade, map: "mentee_progress_ibfk_2")
 
@@ -331,11 +332,11 @@ model mentee_attendance {
   attendance_date DateTime                 @db.DateTime(0)
   status          mentee_attendance_status
   created_at      DateTime                 @db.Timestamp(0)
-  update_at       DateTime                 @db.Timestamp(0)
+  updated_at      DateTime                 @db.Timestamp(0)
   id_mentee       Int
   id_program      Int
   mentee          mentee                   @relation(fields: [id_mentee], references: [id], onDelete: Cascade, map: "mentee_attendance_ibfk_1")
-  mentee_progress mentee_progress          @relation(fields: [id_program], references: [id], onDelete: Cascade, map: "mentee_attendance_ibfk_2")
+  mentee_progress program                  @relation(fields: [id_program], references: [id], onDelete: Cascade, map: "mentee_attendance_ibfk_2")
 
   @@index([id_mentee, id_program], map: "id_mentee")
   @@index([id_program], map: "id_program")

@@ -1369,6 +1369,7 @@ export const viewsCampus = async (menteeId, idCampus) => {
   return { message: "Berhasil mencatat view kampus." };
 };
 
+// get presensi mentee
 export const getPresensi = async (programId, menteeId) => {
   if (!programId) throw new AppError("Program tidak ditemukan", 404);
 
@@ -1383,10 +1384,51 @@ export const getPresensi = async (programId, menteeId) => {
       type_sesi: true,
       start_program_date: true,
       end_program_date: true,
+      expired_presensi: true,
     },
   });
 
   if (!getProgram) throw new AppError("Program tidak ditemukan", 404);
+
+  const now = new Date();
+  const startDate = new Date(getProgram.start_program_date);
+
+  // Set jam ke 00:00 untuk menghitung selisih hari dengan akurat
+  const startDayOnly = new Date(
+    startDate.getFullYear(),
+    startDate.getMonth(),
+    startDate.getDate(),
+  );
+  const todayOnly = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+
+  // Hitung selisih hari (Hari ke-1, Hari ke-2, dst)
+  const diffTime = todayOnly - startDayOnly;
+  const currentDayNumber = Math.floor(diffTime / (1000 * 60 * 60 * 24)) + 1;
+
+  // Cari config untuk hari ini
+  const sessionConfig = getProgram.expired_presensi; // Array yang kamu berikan
+  const dayConfig = sessionConfig.find((c) => c.day === currentDayNumber);
+
+  if (!dayConfig) {
+    throw new AppError("Tidak ada jadwal presensi untuk hari ini", 400);
+  }
+
+  // Gabungkan tanggal hari ini dengan jam expired dari config
+  const [expHour, expMin, expSec] = dayConfig.expiry_time.split(":");
+  const expiryDate = new Date();
+  expiryDate.setHours(
+    parseInt(expHour),
+    parseInt(expMin),
+    parseInt(expSec),
+    999,
+  );
+
+  if (now > expiryDate) {
+    throw new AppError(
+      `Batas waktu presensi hari ini (${dayConfig.expiry_time}) telah lewat`,
+      410,
+    );
+  }
 
   const getMenteePresensi = await prisma.mentee_progress.findFirst({
     where: {
@@ -1412,5 +1454,130 @@ export const getPresensi = async (programId, menteeId) => {
   return {
     message: "Detail program ditemukan",
     data: getProgram,
+  };
+};
+
+export const submitPresensi = async (menteeId, programId, reqBody) => {
+  const { status } = reqBody;
+
+  const checkMentee = await prisma.mentee_progress.findFirst({
+    where: {
+      id_mentee: menteeId,
+      id_program: programId,
+    },
+  });
+
+  if (!checkMentee) {
+    throw new AppError("Anda tidak terdaftar di program ini", 403);
+  }
+
+  const getProgram = await prisma.program.findUnique({
+    where: {
+      id: programId,
+    },
+    select: {
+      start_program_date: true,
+      end_program_date: true,
+      expired_presensi: true,
+    },
+  });
+
+  // if program already finish
+  if (getProgram.end_program_date < new Date()) {
+    throw new AppError("Program telah berakhir", 410);
+  }
+
+  const now = new Date();
+  const startDate = new Date(getProgram.start_program_date);
+
+  // Set jam ke 00:00 untuk menghitung selisih hari dengan akurat
+  const startDayOnly = new Date(
+    startDate.getFullYear(),
+    startDate.getMonth(),
+    startDate.getDate(),
+  );
+  const todayOnly = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+
+  // Hitung selisih hari (Hari ke-1, Hari ke-2, dst)
+  const diffTime = todayOnly - startDayOnly;
+  const currentDayNumber = Math.floor(diffTime / (1000 * 60 * 60 * 24)) + 1;
+
+  // Cari config untuk hari ini
+  const sessionConfig = getProgram.expired_presensi; // Array yang kamu berikan
+  const dayConfig = sessionConfig.find((c) => c.day === currentDayNumber);
+
+  if (!dayConfig) {
+    throw new AppError("Tidak ada jadwal presensi untuk hari ini", 400);
+  }
+
+  // Gabungkan tanggal hari ini dengan jam expired dari config
+  const [expHour, expMin, expSec] = dayConfig.expiry_time.split(":");
+  const expiryDate = new Date();
+  expiryDate.setHours(
+    parseInt(expHour),
+    parseInt(expMin),
+    parseInt(expSec),
+    999,
+  );
+
+  if (now > expiryDate) {
+    throw new AppError(
+      `Batas waktu presensi hari ini (${dayConfig.expiry_time}) telah lewat`,
+      410,
+    );
+  }
+
+  // check if already submit
+  const startOfToday = new Date(
+    now.getFullYear(),
+    now.getMonth(),
+    now.getDate(),
+    0,
+    0,
+    0,
+  );
+  const endOfToday = new Date(
+    now.getFullYear(),
+    now.getMonth(),
+    now.getDate(),
+    23,
+    59,
+    59,
+  );
+
+  const checkStatus = await prisma.mentee_attendance.findFirst({
+    where: {
+      id_mentee: menteeId,
+      id_program: programId,
+      attendance_date: {
+        gte: startOfToday, // Greater than or equal (>= 00:00)
+        lte: endOfToday, // Less than or equal (<= 23:59)
+      },
+    },
+    select: {
+      id: true,
+    },
+  });
+
+  if (checkStatus) {
+    throw new AppError("Anda sudah melakukan presensi hari ini", 400);
+  }
+
+  // console.log(programId);
+
+  const updatePresensi = await prisma.mentee_attendance.create({
+    data: {
+      id_mentee: menteeId,
+      id_program: Number(programId),
+      status: status,
+      attendance_date: new Date(),
+      created_at: new Date(),
+      updated_at: new Date(),
+    },
+  });
+
+  return {
+    message: "Presensi berhasil dikirim",
+    data: updatePresensi,
   };
 };

@@ -359,3 +359,24 @@ export const getPresensi = async (req, res, next) => {
     next(error);
   }
 };
+
+export const submiPresensi = async (req, res, next) => {
+  try {
+    const menteeId = req.user.id;
+    const idProgram = parseInt(req.params.idProgram);
+    const reqBody = req.body;
+
+    const result = await menteeService.submitPresensi(
+      menteeId,
+      idProgram,
+      reqBody,
+    );
+
+    res.status(200).json({
+      message: result.message,
+      data: result.data,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
