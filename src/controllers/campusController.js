@@ -238,3 +238,22 @@ export const getPresensiMentee = async (req, res, next) => {
     next(error);
   }
 };
+
+export const updateExpiredPresensi = async (req, res, next) => {
+  try {
+    const programId = parseInt(req.params.idProgram);
+    const reqBody = req.body;
+
+    const result = await campusService.updateExpiredPresensi(
+      programId,
+      reqBody,
+    );
+
+    res.status(200).json({
+      message: result.message,
+      data: result.data,
+    });
+  } catch (error) {
+    next(error);
+  }
+};

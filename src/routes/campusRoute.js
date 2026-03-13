@@ -316,6 +316,14 @@ router.get(
   campusController.getPresensiMentee,
 );
 
+// update expired presensi
+router.put(
+  "/update-expired-presensi/:idProgram",
+  authenticateUser,
+  authorizeRoles(["campus"]),
+  campusController.updateExpiredPresensi,
+);
+
 // generate certificate
 router.post(
   "/generate-certificate",

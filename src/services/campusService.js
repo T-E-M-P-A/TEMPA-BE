@@ -451,6 +451,7 @@ export const getAllProgramByCampusId = async (idCampus) => {
       image_url: imageUrl,
       sesi_program: item.type_sesi,
       visibility: item.visibility,
+      expired_presensi: item.expired_presensi,
     };
 
     return newItem;
@@ -975,23 +976,38 @@ export const createProgram = async (reqBody, idCampus, reqFile) => {
       return Array.isArray(value) ? value : [];
     };
 
+    const start = new Date(startDateProgram);
+    const end = new Date(endDateProgram);
+
+    // Hitung selisih hari (Day 1 sampai Day N)
+    const diffTime = Math.abs(end - start);
+    const totalDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1;
+
+    // Generate array default
+    const defaultExpiredConfig = Array.from({ length: totalDays }, (_, i) => ({
+      day: i + 1,
+      expiry_time: "12:00:00", // Default sesuai permintaanmu
+    }));
+    // ------------------------------------------------
+
     const programData = {
       program_name: name,
       description: description,
-      start_program_date: new Date(startDateProgram),
-      end_program_date: new Date(endDateProgram),
+      start_program_date: start,
+      end_program_date: end,
       start_regis_date: new Date(startRegisDate),
       end_regis_date: new Date(endRegisDate),
       capacity: parseInt(capacity, 10),
       id_campus: parseInt(idCampus),
       id_major: major.id,
-      path_gambar: reqFile.path.replace(/\\/g, "/"), // Gunakan reqFile
+      path_gambar: reqFile.path.replace(/\\/g, "/"),
       benefit: parseJsonOrWrapInArray(benefits),
       terms_and_conditions: parseJsonOrWrapInArray(terms),
       type_sesi: programType,
       sesi_start: new Date(`1970-01-01T${startTime}:00`),
       sesi_end: new Date(`1970-01-01T${endTime}:00`),
       visibility: visibility,
+      expired_presensi: defaultExpiredConfig,
       create_at: new Date(),
       update_at: new Date(),
     };
@@ -1063,25 +1079,27 @@ export const updateProgram = async (idCampus, id, reqBody, reqFile) => {
       );
     }
 
-    // 2. Validasi Major ID baru (jika diubah)
-    const majorId = parseInt(majorName, 10);
-    // console.log(majorName);
-    if (isNaN(majorId)) {
+    // console.log("majorName: " + majorName);
+
+    // 2. LOGIKA BARU: Cari id_major berdasarkan id_standard_major yang dikirim
+    const standardMajorId = parseInt(majorName, 10);
+    if (isNaN(standardMajorId)) {
       throw new AppError("Format ID Jurusan tidak valid.", 400);
     }
 
-    const major = await prisma.major.findFirst({
+    // Cari di tabel 'major' (tabel jembatan)
+    const majorRow = await prisma.major.findFirst({
       where: {
-        id_campus: parseInt(idCampus),
-        OR: [{ id: majorId }, { id_standard_major: majorId }],
+        id: standardMajorId,
+        id_campus: parseInt(idCampus), // Verifikasi kepemilikan
       },
     });
 
-    // console.log(`id jurusan: ${majorId}, id campus: ${idCampus}`);
-    // console.log(major);
-
-    if (!major) {
-      throw new AppError("Jurusan tidak ditemukan atau bukan milik Anda.", 404);
+    if (!majorRow) {
+      throw new AppError(
+        "Jurusan tersebut tidak terdaftar di kampus Anda.",
+        404,
+      );
     }
 
     // Helper untuk menangani field yang bisa berupa string atau array dari FormData
@@ -1091,10 +1109,27 @@ export const updateProgram = async (idCampus, id, reqBody, reqFile) => {
       return [field.trim()];
     };
 
-    // 3. Siapkan data yang akan di-update
+    const start = new Date(startDateProgram);
+    const end = new Date(endDateProgram);
+
+    // Hitung selisih hari (Day 1 sampai Day N)
+    const diffTime = Math.abs(end - start);
+    const totalDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1;
+
+    // Generate array default
+    const defaultExpiredConfig = Array.from({ length: totalDays }, (_, i) => ({
+      day: i + 1,
+      expiry_time: "12:00:00", // Default sesuai permintaanmu
+    }));
+    // ------------------------------------------------
+
     const dataToUpdate = {
       program_name: name,
-      id_major: majorId,
+      // GUNAKAN ID dari majorRow (ID tabel jembatan)
+      // Gunakan connect jika muncul error "Unknown Argument id_major"
+      campus_program_id_majorTocampus: {
+        connect: { id: majorRow.id },
+      },
       type_sesi: programType,
       visibility: visibility,
       start_regis_date: new Date(startRegisDate),
@@ -1107,6 +1142,8 @@ export const updateProgram = async (idCampus, id, reqBody, reqFile) => {
       description: description,
       benefit: processMultiPartArray(benefits),
       terms_and_conditions: processMultiPartArray(terms),
+      // Sesuaikan nama kolom JSON di DB (biasanya expired_presensi)
+      expired_presensi: defaultExpiredConfig,
       update_at: new Date(),
     };
 
@@ -1272,5 +1309,33 @@ export const getPresensiMentee = async (idCampus, idProgram) => {
   return {
     message: "Data presensi mentee berhasil diambil",
     data: formatDataPresensi,
+  };
+};
+
+export const updateExpiredPresensi = async (programId, reqBody) => {
+  const { expiredPresensi } = reqBody;
+
+  // console.log(expiredPresensi);
+
+  if (!Array.isArray(expiredPresensi)) {
+    throw new AppError("Format data presensi tidak valid", 400);
+  }
+
+  if (!programId) {
+    throw new AppError("Program tidak ditemukan", 404);
+  }
+
+  const updateExpiredPresensi = await prisma.program.update({
+    where: {
+      id: programId,
+    },
+    data: {
+      expired_presensi: expiredPresensi,
+    },
+  });
+
+  return {
+    message: "Expired presensi berhasil diperbarui",
+    data: updateExpiredPresensi,
   };
 };
