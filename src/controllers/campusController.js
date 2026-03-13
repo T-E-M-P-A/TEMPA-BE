@@ -239,6 +239,7 @@ export const getPresensiMentee = async (req, res, next) => {
   }
 };
 
+// update expired presensi
 export const updateExpiredPresensi = async (req, res, next) => {
   try {
     const programId = parseInt(req.params.idProgram);

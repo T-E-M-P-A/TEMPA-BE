@@ -558,6 +558,18 @@ export const getDetailProgram = async (idCampus, idProgram) => {
           },
         },
       },
+      mentee_attendance: {
+        where: {
+          id_program: parsedIdProgram,
+        },
+        select: {
+          id: true,
+          status: true,
+          attendance_date: true,
+          id_mentee: true,
+          id_program: true,
+        },
+      },
       // total mentee where register program
       _count: {
         select: {
@@ -658,17 +670,32 @@ export const getDetailProgram = async (idCampus, idProgram) => {
     // format data for mentee list
     free_trial: getCampusSubscription ? true : false,
     send_mail: getCampusSubscription?.id_package === 2 ? true : false,
-    mentee_list: item.mentee_progress.map((mp) => ({
-      id: mp.mentee?.id,
-      username: mp.mentee?.username,
-      email: getCampusSubscription?.id_package === 2 ? mp.mentee?.email : null,
-      gender: mp.mentee?.gender,
-      completion_status: mp.completion_status,
-      final_score: mp.final_score,
-      create_at: mp.create_at,
-      city_distribution: formattedCityDistribution,
-      education_status_distribution: formattedEducationStatus,
-    })),
+    mentee_list: item.mentee_progress.map((mp) => {
+      // 1. Ambil ID mentee saat ini
+      const currentMenteeId = mp.mentee?.id;
+
+      // 2. Filter data presensi dari array besar 'mentee_attendance'
+      // yang hanya milik mentee ini
+      const specificAttendance = item.mentee_attendance.filter(
+        (attendance) => attendance.id_mentee === currentMenteeId,
+      );
+
+      return {
+        id: currentMenteeId,
+        username: mp.mentee?.username,
+        email:
+          getCampusSubscription?.id_package === 2 ? mp.mentee?.email : null,
+        gender: mp.mentee?.gender,
+        completion_status: mp.completion_status,
+        final_score: mp.final_score,
+        create_at: mp.create_at,
+        city_distribution: formattedCityDistribution,
+        education_status_distribution: formattedEducationStatus,
+
+        // 3. Masukkan data presensi yang sudah difilter ke dalam objek mentee
+        attendance_list: specificAttendance,
+      };
+    }),
     // format data for matery
     materi_list: formattedMateriList,
     mentor_list: item.program_mentor.map((pm) => ({
