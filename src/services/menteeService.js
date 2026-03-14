@@ -763,15 +763,15 @@ export const recomendationMajors = async (menteeId, reqBody) => {
 
         Anda harus membatasi rekomendasi hanya pada jurusan yang tersedia dalam daftar berikut: ${availableMajors}.
 
+       Untuk bagian "profesi_relevan", pastikan Anda mencantumkan nama-nama pekerjaan yang **paling populer, umum dikenal di Indonesia, dan sedang tren di pasar kerja saat ini** (contoh: gunakan 'Web Developer' daripada 'Software Quality Assurance Engineer').
+
         Berikan keluaran Anda dalam format JSON array of objects dengan struktur ini:
         [
           {
             "jurusan": "Nama Jurusan (HARUS ada di daftar yang tersedia)",
             "kesesuaian": "Penjelasan ringkas (1-2 kalimat) mengapa jurusan ini cocok dengan profil pengguna.",
-            "profesi_relevan": ["Profesi A", "Profesi B"]
-          },
-          // ... objek kedua
-          // ... objek ketiga (opsional)
+            "profesi_relevan": ["Pekerjaan Populer 1", "Pekerjaan Populer 2", "Pekerjaan Populer 3"]
+          }
         ]
         `;
 
