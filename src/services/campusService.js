@@ -1136,19 +1136,37 @@ export const updateProgram = async (idCampus, id, reqBody, reqFile) => {
       return [field.trim()];
     };
 
+    const oldConfig = existingProgram.expired_presensi || [];
+
+    // 2. Hitung durasi baru
     const start = new Date(startDateProgram);
     const end = new Date(endDateProgram);
-
-    // Hitung selisih hari (Day 1 sampai Day N)
     const diffTime = Math.abs(end - start);
     const totalDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1;
 
-    // Generate array default
-    const defaultExpiredConfig = Array.from({ length: totalDays }, (_, i) => ({
-      day: i + 1,
-      expiry_time: "12:00:00", // Default sesuai permintaanmu
-    }));
-    // ------------------------------------------------
+    // 3. Generate array baru dengan logika MAPPING/MERGING
+    const mergedExpiredConfig = Array.from({ length: totalDays }, (_, i) => {
+      const currentDay = i + 1;
+
+      // Cari apakah di data lama sudah ada konfigurasi untuk Day ini
+      const existingDayConfig = oldConfig.find(
+        (item) => item.day === currentDay,
+      );
+
+      if (existingDayConfig) {
+        // Jika ada, pakai data lama (agar jam tidak reset)
+        return {
+          day: currentDay,
+          expiry_time: existingDayConfig.expiry_time,
+        };
+      } else {
+        // Jika harinya baru (penambahan hari), pakai default
+        return {
+          day: currentDay,
+          expiry_time: "12:00:00",
+        };
+      }
+    });
 
     const dataToUpdate = {
       program_name: name,
@@ -1170,7 +1188,7 @@ export const updateProgram = async (idCampus, id, reqBody, reqFile) => {
       benefit: processMultiPartArray(benefits),
       terms_and_conditions: processMultiPartArray(terms),
       // Sesuaikan nama kolom JSON di DB (biasanya expired_presensi)
-      expired_presensi: defaultExpiredConfig,
+      expired_presensi: mergedExpiredConfig,
       update_at: new Date(),
     };
 

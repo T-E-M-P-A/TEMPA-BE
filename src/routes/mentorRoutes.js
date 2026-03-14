@@ -186,34 +186,65 @@ router.get(
   async (req, res) => {
     const idMentor = req.user.id;
     try {
-      const getProgramCampus = await prisma.program_mentor.findMany({
+      // 1. PERBAIKAN: Gunakan 'id', bukan 'id_mentor'
+      const mentorData = await prisma.mentor.findUnique({
         where: {
-          id_mentor: idMentor,
+          id: idMentor,
         },
         select: {
-          program: {
-            select: {
-              id: true,
-              program_name: true,
-              _count: {
-                select: {
-                  mentee_progress: true,
+          id_campus: true,
+          mentor_type: true,
+        },
+      });
+
+      if (!mentorData) {
+        return res.status(404).json({ message: "Mentor tidak ditemukan" });
+      }
+
+      // 2. PERBAIKAN: Gunakan 'let', jangan 'const' karena variabel ini akan diisi ulang
+      let getProgramCampus = [];
+
+      if (mentorData.mentor_type === "default") {
+        const programMentors = await prisma.program_mentor.findMany({
+          where: {
+            id_mentor: idMentor,
+          },
+          select: {
+            program: {
+              select: {
+                id: true,
+                program_name: true,
+                _count: {
+                  select: { mentee_progress: true },
                 },
               },
             },
           },
-        },
-      });
+        });
+        // Map agar strukturnya seragam dengan findMany program langsung
+        getProgramCampus = programMentors.map((pm) => pm.program);
+      } else {
+        // Jika super_mentor, ambil semua program di kampus tersebut
+        getProgramCampus = await prisma.program.findMany({
+          where: {
+            id_campus: mentorData.id_campus,
+          },
+          select: {
+            id: true,
+            program_name: true,
+            _count: {
+              select: { mentee_progress: true },
+            },
+          },
+        });
+      }
 
-      // get count total mentee
-      const programsWithMenteeCount = getProgramCampus.map((item) => ({
-        id: item.program.id,
-        program_name: item.program.program_name,
-        // Total mentee diambil dari hasil perhitungan _count
-        total_mentee: item.program._count.mentee_progress,
+      // 3. PERBAIKAN: Mapping data akhir
+      const programsWithMenteeCount = getProgramCampus.map((program) => ({
+        id: program.id,
+        program_name: program.program_name,
+        total_mentee: program._count?.mentee_progress || 0,
       }));
-
-      console.log(programsWithMenteeCount);
 
       return res.status(200).json({
         message: "Data program beserta total mentee berhasil diambil",
