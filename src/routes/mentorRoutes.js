@@ -37,7 +37,7 @@ const uploadProgramImage = multer({
   fileFilter: (req, file, cb) => {
     const fileTypes = /jpeg|jpg|png|gif/;
     const extname = fileTypes.test(
-      path.extname(file.originalname).toLowerCase()
+      path.extname(file.originalname).toLowerCase(),
     );
     const mimetype = fileTypes.test(file.mimetype);
     if (mimetype && extname) {
@@ -97,7 +97,7 @@ const campusImageStorage = multer.diskStorage({
       null,
       `campus-${file.fieldname}-` +
         uniqueSuffix +
-        path.extname(file.originalname)
+        path.extname(file.originalname),
     );
   },
 });
@@ -108,7 +108,7 @@ const uploadCampusImages = multer({
   fileFilter: (req, file, cb) => {
     const fileTypes = /jpeg|jpg|png|gif/;
     const extname = fileTypes.test(
-      path.extname(file.originalname).toLowerCase()
+      path.extname(file.originalname).toLowerCase(),
     );
     const mimetype = fileTypes.test(file.mimetype);
     if (mimetype && extname) return cb(null, true);
@@ -162,7 +162,7 @@ router.post("/login-mentor", async (req, res) => {
         role: "mentor",
       },
       JWT_SECRET,
-      { expiresIn: "1d" } // expired in 1 day
+      { expiresIn: "1d" }, // expired in 1 day
     );
 
     return res.status(200).json({
@@ -227,7 +227,7 @@ router.get(
         error: error.message,
       });
     }
-  }
+  },
 );
 
 // get program by mentor id
@@ -326,7 +326,7 @@ router.get(
         return newItem;
       });
 
-      console.log(formattedPrograms);
+      // console.log(formattedPrograms);
 
       return res.status(200).json({
         message: "Berhasil mengambil data program mentor",
@@ -339,7 +339,7 @@ router.get(
         error: error.message,
       });
     }
-  }
+  },
 );
 
 // get detail program by id for mentor
@@ -368,7 +368,9 @@ router.get(
       const getCampusSubscription = await prisma.campus_subscription.findFirst({
         where: {
           id_campus: mentorData.id_campus,
-          id_package: 2,
+          id_package: {
+            in: [1, 2],
+          },
           expired_date: {
             gte: new Date(),
           },
@@ -412,14 +414,13 @@ router.get(
               },
             },
           },
-          // ✅ TAMBAHKAN MATERI PROGRAM
+
           materi: {
             select: {
               id: true,
               title: true,
               description: true,
               visibility: true,
-              // Anda bisa tambahkan materi_resource jika perlu detail file
               materi_resource: {
                 select: {
                   type: true,
@@ -428,15 +429,16 @@ router.get(
               },
             },
           },
-          // ✅ TAMBAHKAN PROGRESS MENTEE (PESERTA)
+
+          // get mentee where register program
           mentee_progress: {
             select: {
               completion_status: true,
               final_score: true,
               create_at: true,
               mentee: {
-                // Relasi ke detail mentee
                 select: {
+                  id: true,
                   username: true,
                   email: true,
                   gender: true,
@@ -444,7 +446,18 @@ router.get(
               },
             },
           },
-          // ✅ TAMBAHKAN COUNT UNTUK TOTAL PESERTA TERDAFTAR
+          mentee_attendance: {
+            where: {
+              id_program: parsedIdProgram,
+            },
+            select: {
+              id: true,
+              status: true,
+              attendance_date: true,
+              id_mentee: true,
+              id_program: true,
+            },
+          },
           _count: {
             select: {
               mentee_progress: true,
@@ -537,24 +550,40 @@ router.get(
       const formattedDetail = {
         ...item,
         image_url: imageUrl,
+        seen: !getCampusSubscription ? false : detailProgram.seen,
         major_name:
           item.campus_program_id_majorTocampus?.standard_major?.major_name ||
           null,
         registered_mentees: item._count?.mentee_progress || 0,
-        idCampus: getCampusSubscription?.id_campus || null,
-        free_trial: getCampusSubscription ? false : true,
         // format data for mentee list
-        mentee_list: item.mentee_progress.map((mp) => ({
-          id: mp.mentee?.id,
-          username: mp.mentee?.username,
-          email: mp.mentee?.email,
-          gender: mp.mentee?.gender,
-          completion_status: mp.completion_status,
-          final_score: mp.final_score,
-          create_at: mp.create_at,
-          city_distribution: formattedCityDistribution,
-          education_status_distribution: formattedEducationStatus,
-        })),
+        free_trial: getCampusSubscription ? true : false,
+        send_mail: getCampusSubscription?.id_package === 2 ? true : false,
+        mentee_list: item.mentee_progress.map((mp) => {
+          // 1. Ambil ID mentee saat ini
+          const currentMenteeId = mp.mentee?.id;
+
+          // 2. Filter data presensi dari array besar 'mentee_attendance'
+          // yang hanya milik mentee ini
+          const specificAttendance = item.mentee_attendance.filter(
+            (attendance) => attendance.id_mentee === currentMenteeId,
+          );
+
+          return {
+            id: currentMenteeId,
+            username: mp.mentee?.username,
+            email:
+              getCampusSubscription?.id_package === 2 ? mp.mentee?.email : null,
+            gender: mp.mentee?.gender,
+            completion_status: mp.completion_status,
+            final_score: mp.final_score,
+            create_at: mp.create_at,
+            city_distribution: formattedCityDistribution,
+            education_status_distribution: formattedEducationStatus,
+
+            // 3. Masukkan data presensi yang sudah difilter ke dalam objek mentee
+            attendance_list: specificAttendance,
+          };
+        }),
         // format data for matery
         materi_list: formattedMateriList,
         mentor_list: item.program_mentor.map((pm) => ({
@@ -578,6 +607,8 @@ router.get(
       delete formattedDetail.mentee_progress;
       delete formattedDetail.materi; // Hapus materi mentah
 
+      console.log(formattedDetail);
+
       return res.status(200).json({
         message: "Detail program berhasil ditemukan.",
         data: formattedDetail,
@@ -589,7 +620,57 @@ router.get(
         error: error.message,
       });
     }
-  }
+  },
+);
+
+// update expired presensi
+router.put(
+  "/update-expired-presensi-mentor/:idProgram",
+  authenticateUser,
+  authorizeRoles(["mentor"]),
+  async (req, res) => {
+    try {
+      const programId = parseInt(req.params.idProgram);
+      const { expiredPresensi } = req.body;
+
+      // console.log(expiredPresensi);
+
+      if (!Array.isArray(expiredPresensi)) {
+        // throw new AppError("Format data presensi tidak valid", 400);
+        return res.status(400).json({
+          message: "Format data presensi tidak valid",
+        });
+      }
+
+      if (!programId) {
+        // throw new AppError("Program tidak ditemukan", 404);
+        return res.status(404).json({
+          message: "Program tidak ditemukan",
+        });
+      }
+
+      const updateExpiredPresensi = await prisma.program.update({
+        where: {
+          id: programId,
+        },
+        data: {
+          expired_presensi: expiredPresensi,
+        },
+      });
+
+      return res.status(200).json({
+        message: "Expired presensi berhasil diperbarui",
+        data: updateExpiredPresensi,
+      });
+    } catch (error) {
+      return res
+        .status(500)
+        .json(
+          "Terjadi kesalahan server saat memperbarui expired presensi.",
+          error,
+        );
+    }
+  },
 );
 
 // create program for mentor
@@ -811,7 +892,7 @@ router.post(
         error: error.message,
       });
     }
-  }
+  },
 );
 
 // edit program by id for mentor
@@ -929,7 +1010,7 @@ router.put(
         if (existingProgram.path_gambar) {
           const oldImagePath = path.join(
             process.cwd(),
-            existingProgram.path_gambar
+            existingProgram.path_gambar,
           );
           if (fs.existsSync(oldImagePath)) {
             fs.unlink(oldImagePath, (err) => {
@@ -937,7 +1018,7 @@ router.put(
                 console.error(
                   "Gagal menghapus gambar lama:",
                   oldImagePath,
-                  err
+                  err,
                 );
             });
           }
@@ -984,7 +1065,7 @@ router.put(
           if (err)
             console.error(
               "Gagal menghapus file yang baru diunggah setelah error:",
-              err
+              err,
             );
         });
       }
@@ -998,7 +1079,7 @@ router.put(
         error: error.message,
       });
     }
-  }
+  },
 );
 
 // get major for form major
@@ -1031,7 +1112,7 @@ router.get(
         .status(500)
         .json({ message: "Not Found due to internal error." });
     }
-  }
+  },
 );
 
 // get major campus
@@ -1082,7 +1163,7 @@ router.get(
         message: "Terjadi kesalahan server saat mengambil data jurusan.",
       });
     }
-  }
+  },
 );
 
 // add majors to campus for mentor
@@ -1128,7 +1209,7 @@ router.post(
       const newStandardMajorIds = new Set(
         newMajorsFromRequest
           .map((major) => major.id)
-          .filter((id) => typeof id === "number")
+          .filter((id) => typeof id === "number"),
       );
 
       // Ambil semua jurusan yang saat ini terdaftar untuk kampus ini
@@ -1137,15 +1218,15 @@ router.post(
         select: { id_standard_major: true },
       });
       const existingStandardMajorIds = new Set(
-        existingMajors.map((major) => major.id_standard_major)
+        existingMajors.map((major) => major.id_standard_major),
       );
 
       // Tentukan jurusan mana yang akan ditambahkan dan dihapus
       const idsToAdd = [...newStandardMajorIds].filter(
-        (id) => !existingStandardMajorIds.has(id)
+        (id) => !existingStandardMajorIds.has(id),
       );
       const idsToRemove = [...existingStandardMajorIds].filter(
-        (id) => !newStandardMajorIds.has(id)
+        (id) => !newStandardMajorIds.has(id),
       );
 
       // Gunakan transaksi untuk memastikan semua operasi berhasil atau tidak sama sekali
@@ -1187,7 +1268,7 @@ router.post(
         error: error.message,
       });
     }
-  }
+  },
 );
 
 // =======================================================================
@@ -1313,7 +1394,7 @@ router.post(
         error: error.message,
       });
     }
-  }
+  },
 );
 
 // =======================================================================
@@ -1424,7 +1505,7 @@ router.put(
         req.files.forEach((file) => {
           // Fieldname format: new_resources[0][file]
           const match = file.fieldname.match(
-            /^new_resources\[(\d+)\]\[file\]$/
+            /^new_resources\[(\d+)\]\[file\]$/,
           );
           if (match) {
             setResourceData(match[1], "file", file);
@@ -1435,7 +1516,7 @@ router.put(
       const newResources = Object.values(newResourcesMap);
       // Filter resource yang memiliki type ATAU memiliki file (jika type lupa dikirim)
       const validNewResources = newResources.filter(
-        (res) => res.type || res.file
+        (res) => res.type || res.file,
       );
 
       // 3. Kelola Resource Lama (Keep dan Delete)
@@ -1444,11 +1525,11 @@ router.put(
       if (req.body.kept_resource_ids) {
         if (Array.isArray(req.body.kept_resource_ids)) {
           keptResourceIds = req.body.kept_resource_ids.map((id) =>
-            parseInt(id, 10)
+            parseInt(id, 10),
           );
         } else if (typeof req.body.kept_resource_ids === "object") {
           keptResourceIds = Object.values(req.body.kept_resource_ids).map(
-            (id) => parseInt(id, 10)
+            (id) => parseInt(id, 10),
           );
         } else {
           keptResourceIds = [parseInt(req.body.kept_resource_ids, 10)];
@@ -1484,7 +1565,7 @@ router.put(
               const existingRes = materi.materi_resource.find(
                 (r) =>
                   r.type === "file" &&
-                  normalizeResourcePath(r.path_file) === normalizedUrl
+                  normalizeResourcePath(r.path_file) === normalizedUrl,
               );
 
               if (existingRes) {
@@ -1534,7 +1615,7 @@ router.put(
 
       const existingResourceIds = materi.materi_resource.map((r) => r.id);
       const resourcesToDeleteIds = existingResourceIds.filter(
-        (id) => !keptResourceIds.includes(id)
+        (id) => !keptResourceIds.includes(id),
       );
 
       const keptCount = keptResourceIds.length;
@@ -1549,22 +1630,22 @@ router.put(
 
       const newResourcePaths = resourcesToCreate.map((r) => r.path_file);
       const resourcesToDelete = materi.materi_resource.filter((r) =>
-        resourcesToDeleteIds.includes(r.id)
+        resourcesToDeleteIds.includes(r.id),
       );
 
       const idsToRescue = resourcesToDelete
         .filter(
-          (r) => r.type === "file" && newResourcePaths.includes(r.path_file)
+          (r) => r.type === "file" && newResourcePaths.includes(r.path_file),
         )
         .map((r) => r.id);
 
       const finalResourcesToDeleteIds = resourcesToDeleteIds.filter(
-        (id) => !idsToRescue.includes(id)
+        (id) => !idsToRescue.includes(id),
       );
 
       if (finalResourcesToDeleteIds.length > 0) {
         const deletedFileResources = materi.materi_resource.filter(
-          (r) => r.type === "file" && finalResourcesToDeleteIds.includes(r.id)
+          (r) => r.type === "file" && finalResourcesToDeleteIds.includes(r.id),
         );
 
         for (const res of deletedFileResources) {
@@ -1576,7 +1657,7 @@ router.put(
           });
 
           const isReusedInNew = resourcesToCreate.some(
-            (newRes) => newRes.path_file === res.path_file
+            (newRes) => newRes.path_file === res.path_file,
           );
 
           if (
@@ -1610,7 +1691,7 @@ router.put(
         transactionQueries.push(
           prisma.materi_resource.createMany({
             data: resourcesToCreate,
-          })
+          }),
         );
       }
 
@@ -1633,7 +1714,7 @@ router.put(
         error: error.message,
       });
     }
-  }
+  },
 );
 
 // =======================================================================
@@ -1737,7 +1818,7 @@ router.delete(
         error: error.message,
       });
     }
-  }
+  },
 );
 
 // delete program by id for mentor
@@ -1827,7 +1908,7 @@ router.delete(
         error: error.message,
       });
     }
-  }
+  },
 );
 
 // get detail campus for mentor
@@ -1895,11 +1976,11 @@ router.get(
       const formattedData = { ...campusDetail };
       formattedData.logo_url = formatPathToUrl(
         formattedData.path_logo,
-        BASE_URL
+        BASE_URL,
       );
       formattedData.banner_url = formatPathToUrl(
         formattedData.path_banner,
-        BASE_URL
+        BASE_URL,
       );
       delete formattedData.path_logo;
       delete formattedData.path_banner;
@@ -1915,7 +1996,7 @@ router.get(
         error: error.message,
       });
     }
-  }
+  },
 );
 
 // edit image campus for mentor
@@ -2052,7 +2133,7 @@ router.put(
         error: error.message,
       });
     }
-  }
+  },
 );
 
 // edit description and vision mission campus for mentor
@@ -2129,7 +2210,7 @@ router.put(
         error: error.message,
       });
     }
-  }
+  },
 );
 
 // test midleware
@@ -2148,7 +2229,7 @@ router.post(
         message: error,
       });
     }
-  }
+  },
 );
 
 export default router;
