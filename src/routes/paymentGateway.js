@@ -163,7 +163,7 @@ router.post(
         const startDate = new Date();
         const expiredDate = new Date(startDate);
         expiredDate.setMonth(
-          expiredDate.getMonth() + getSubscription.duration_month
+          expiredDate.getMonth() + getSubscription.duration_month,
         );
 
         await prisma.campus_subscription.create({
@@ -201,7 +201,7 @@ router.post(
               "Request-Timestamp": timestamp,
               Signature: `HMACSHA256=${signature}`,
             },
-          }
+          },
         );
 
         return res.status(200).json({
@@ -216,7 +216,16 @@ router.post(
         error: error.message,
       });
     }
-  }
+  },
 );
+
+router.post("/webhook-mayar", (req, res) => {
+  const payload = req.body;
+
+  console.log(payload);
+
+  // Selalu kirim status 200 agar Mayar tidak mengirim ulang webhook
+  res.status(200).json({ statusCode: 200, messages: "success" });
+});
 
 export default router;
