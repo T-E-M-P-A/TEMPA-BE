@@ -1190,10 +1190,15 @@ router.put(
   authorizeRoles(["campus"]),
   async (req, res) => {
     const idCampus = req.user.id;
-    const { description, vision_mission } = req.body;
+    const { campus_website, description, vision_mission } = req.body;
+    // console.log(req.body);
 
     // Cek apakah ada data yang dikirim untuk diperbarui
-    if (description === undefined && vision_mission === undefined) {
+    if (
+      description === undefined &&
+      vision_mission === undefined &&
+      campus_website === undefined
+    ) {
       return res
         .status(400)
         .json({ message: "Tidak ada data yang dikirim untuk diperbarui." });
@@ -1201,6 +1206,10 @@ router.put(
 
     try {
       const dataToUpdate = {};
+
+      if (campus_website !== undefined) {
+        dataToUpdate.website_campus = campus_website;
+      }
 
       if (description !== undefined) {
         dataToUpdate.description = description;

@@ -1265,7 +1265,7 @@ export const deleteProgram = async (idCampus, id) => {
     throw new AppError("ID Program tidak valid. Harus berupa angka.", 400);
   }
 
-  // 1. Cari program untuk verifikasi kepemilikan dan mendapatkan path gambar
+  // Cari program untuk verifikasi kepemilikan dan mendapatkan path gambar
   const programToDelete = await prisma.program.findFirst({
     where: {
       id: idProgram,
@@ -1276,15 +1276,16 @@ export const deleteProgram = async (idCampus, id) => {
     },
   });
 
-  // Jika program tidak ditemukan atau bukan milik kampus ini
+  // if program is not owned by the campus
   if (!programToDelete) {
     throw new AppError("Program tidak ditemukan atau bukan milik Anda.", 404);
   }
 
-  // 2. Hapus file gambar jika ada
+  // delete image if exist
   if (programToDelete.path_gambar) {
     // process.cwd() akan mengarah ke root proyek: /home/apipi/Pbl Sem-5/TEMPA-BE
     const imagePath = path.join(process.cwd(), programToDelete.path_gambar);
+    // console.log(`Path gambar: ${imagePath}`);
 
     // Cek apakah file ada sebelum mencoba menghapus
     if (fs.existsSync(imagePath)) {

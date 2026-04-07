@@ -25,27 +25,27 @@ const __dirname = path.dirname(__filename);
 app.use(
   cors({
     origin: "http://localhost:5173",
-    methods: ["GET", "POST", "PUT", "DELETE"], // Tambahkan untuk keamanan
+    methods: ["GET", "POST", "PUT", "DELETE"],
     credentials: true,
     // "https://tempa.ddnsking.com"
   }),
 );
 
-const limiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  limit: (req, res) => {
-    if (req.user) return 1000;
-    return 100;
-  },
-  standardHeaders: "draft-7",
-  legacyHeaders: false,
-  message: {
-    status: 429,
-    message: "Terlalu banyak permintaan dari IP ini, silakan coba lagi nanti.",
-  },
-});
+// const limiter = rateLimit({
+//   windowMs: 15 * 60 * 1000,
+//   limit: (req, res) => {
+//     if (req.user) return 1000;
+//     return 100;
+//   },
+//   standardHeaders: "draft-7",
+//   legacyHeaders: false,
+//   message: {
+//     status: 429,
+//     message: "Terlalu banyak permintaan dari IP ini, silakan coba lagi nanti.",
+//   },
+// });
 
-app.use(limiter);
+// app.use(limiter);
 app.use(
   helmet({
     crossOriginResourcePolicy: { policy: "cross-origin" },

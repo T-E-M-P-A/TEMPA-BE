@@ -408,6 +408,7 @@ export const detailCampus = async (idCampus) => {
       sub_google_id: false,
       vision_mission: true,
       badge: true,
+      website_campus: true,
 
       program_program_id_campusTocampus: {
         where: {
