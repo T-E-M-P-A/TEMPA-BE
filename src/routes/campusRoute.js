@@ -472,7 +472,7 @@ router.get(
         select: {
           id: true,
           name: true,
-          nik: true,
+          email: true,
           mentor_type: true,
         },
       });
@@ -495,7 +495,7 @@ router.get(
 );
 
 // =======================================================================
-// CREATE NEW MENTOR BY CAMPUS
+// CREATE NEW MENTOR BY CAMPUS (AUTO-GENERATE EMAIL)
 // =======================================================================
 router.post(
   "/create-mentor",
@@ -503,37 +503,52 @@ router.post(
   authorizeRoles(["campus"]),
   async (req, res) => {
     const idCampus = req.user.id;
-    const { name, nik, password, mentor_type } = req.body;
+    const { name, password, mentor_type } = req.body;
 
-    // 1. Validasi input dasar
-    if (!name || !nik || !password || !mentor_type) {
+    // 1. Validasi input dasar (Tanpa NIK)
+    if (!name || !password || !mentor_type) {
       return res.status(400).json({
         message:
-          "Gagal: Field 'name', 'nik', 'password', dan 'mentor_type' wajib diisi.",
-      });
-    }
-
-    const parsedNik = parseInt(nik, 10);
-
-    if (isNaN(parsedNik)) {
-      return res.status(400).json({
-        message: "Gagal: 'nik' dan 'id_major' harus berupa angka yang valid.",
+          "Gagal: Field 'name', 'password', dan 'mentor_type' wajib diisi.",
       });
     }
 
     try {
-      // 3. Enkripsi password
+      // 2. Ambil data kampus untuk mendapatkan campus_name
+      const campusData = await prisma.campus.findUnique({
+        where: { id: idCampus },
+        select: { campus_name: true },
+      });
+
+      if (!campusData || !campusData.campus_name) {
+        return res.status(404).json({
+          message:
+            "Gagal: Data kampus tidak ditemukan atau nama kampus belum diatur.",
+        });
+      }
+
+      // 3. Generate Email: "namaMentor@namaKampus.com"
+      // Menghapus spasi dan mengubah ke lowercase
+      const cleanMentorName = name.replace(/\s+/g, "").toLowerCase();
+      const cleanCampusName = campusData.campus_name
+        .replace(/\s+/g, "")
+        .toLowerCase();
+      const generatedEmail = `${cleanMentorName}@${cleanCampusName}.com`;
+
+      // 4. Enkripsi password
       const saltRounds = 10;
       const hashedPassword = await bcrypt.hash(password, saltRounds);
 
-      // 4. Buat mentor baru di database
+      // 5. Buat mentor baru di database
+      // Pastikan model Mentor Anda memiliki field 'email'
       const newMentor = await prisma.mentor.create({
         data: {
           name: name,
-          nik: parsedNik,
+          email: generatedEmail, // Menggunakan email hasil generate
           id_campus: idCampus,
           password: hashedPassword,
           mentor_type: mentor_type,
+          // nik: null, // Jika di DB nik boleh null, jika tidak, isi dengan dummy/random
         },
       });
 
@@ -542,15 +557,18 @@ router.post(
 
       return res.status(201).json({
         message: "Mentor baru berhasil dibuat.",
-        data: newMentor,
+        data: {
+          ...newMentor,
+          generated_email: generatedEmail, // Memberi tahu user email yang baru dibuat
+        },
       });
     } catch (error) {
       console.error("Gagal membuat mentor:", error);
 
-      // Penanganan error jika NIK sudah ada (unique constraint)
-      if (error.code === "P2002" && error.meta?.target?.includes("nik")) {
+      // Penanganan error jika Email sudah ada (unique constraint)
+      if (error.code === "P2002" && error.meta?.target?.includes("email")) {
         return res.status(409).json({
-          message: `Gagal: NIK '${nik}' sudah terdaftar.`,
+          message: `Gagal: Email mentor '${name}' sudah terdaftar untuk kampus ini.`,
         });
       }
 

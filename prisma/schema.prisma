@@ -40,9 +40,10 @@ model admin {
 model mentor {
   id                Int                 @id @default(autoincrement())
   name              String              @db.VarChar(50)
+  email             String              @unique(map: "email") @db.VarChar(225)
   id_campus         Int
   password          String?             @db.Text
-  nik               Int                 @unique(map: "nik")
+  nik               Int?
   mentor_type       mentor_mentor_type
   course_instructor course_instructor[]
   campus            campus              @relation(fields: [id_campus], references: [id], onDelete: Cascade, map: "mentor_ibfk_1")
