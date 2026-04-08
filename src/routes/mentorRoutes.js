@@ -116,12 +116,14 @@ const uploadCampusImages = multer({
   },
 });
 
-// login admin
+// login mentor
 router.post("/login-mentor", async (req, res) => {
-  const { nik, password } = req.body;
+  const { email, password } = req.body;
+
+  console.log(req.body);
 
   //   check if username and password null
-  if (!nik || !password) {
+  if (!email || !password) {
     return res.status(400).json({
       message: "Username or Password not found!",
     });
@@ -131,7 +133,7 @@ router.post("/login-mentor", async (req, res) => {
     // search nik mentor
     const mentor = await prisma.mentor.findUnique({
       where: {
-        nik: nik,
+        email: email,
       },
     });
 
@@ -157,7 +159,7 @@ router.post("/login-mentor", async (req, res) => {
       {
         id: mentor.id,
         username: mentor.name,
-        nik: mentor.nik,
+        email: mentor.email,
         mentorType: mentor.mentor_type,
         role: "mentor",
       },
