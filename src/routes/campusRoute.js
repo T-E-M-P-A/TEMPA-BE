@@ -331,15 +331,21 @@ router.post(
   authorizeRoles(["campus"]),
   async (req, res) => {
     const idCampus = req.user.id;
-    const menteeId = req.body;
+    const { menteeId, idProgram } = req.body;
 
     // console.log(menteeId);
 
-    // get name and email mentee
-    const mentees = await prisma.mentee.findMany({
+    // 1. Ambil data mentee yang HANYA sudah mengisi feedback untuk idProgram ini
+    const menteesWithFeedback = await prisma.mentee.findMany({
       where: {
         id: {
           in: menteeId,
+        },
+        // Sesuaikan nama relasi di schema.prisma Anda (contoh: program_feedbacks)
+        program_feedback: {
+          some: {
+            id_program: idProgram,
+          },
         },
       },
       select: {
@@ -348,36 +354,50 @@ router.post(
       },
     });
 
-    // console.log(mentees);
+    // 2. Validasi jika tidak ada mentee yang memenuhi syarat
+    if (menteesWithFeedback.length === 0) {
+      return res.status(400).send({
+        status: "error",
+        message:
+          "Tidak ada mentee yang bisa diproses karena belum mengisi feedback.",
+      });
+    }
 
-    // get campus name
+    // 3. Ambil data campus seperti biasa
     const campus = await prisma.campus.findUnique({
-      where: {
-        id: idCampus,
-      },
-      select: {
-        campus_name: true,
-      },
+      where: { id: idCampus },
+      select: { campus_name: true },
     });
 
-    // console.log(mentees.length);
+    const getProgram = await prisma.program.findUnique({
+      where: {
+        id: idProgram,
+      },
+      select: {
+        start_program_date: true,
+        end_program_date: true,
+      },
+    });
     const campusName = campus?.campus_name || "Campus Team";
 
-    mentees.forEach((mentee) => {
-      // send object mentee to queue
+    // 4. Proses hanya mentee yang lolos validasi (menteesWithFeedback)
+    menteesWithFeedback.forEach((mentee) => {
       generateCertificateQueue
         .push({
           ...mentee,
           campusName: campusName,
+          idProgram: idProgram,
+          startProgramDate: getProgram?.start_program_date,
+          endProgramDate: getProgram?.end_program_date,
         })
         .catch((err) =>
-          console.error(`Gagal masuk antrean untuk ${mentee.name}:`, err),
+          console.error(`Gagal masuk antrean untuk ${mentee.username}:`, err),
         );
     });
 
     res.send({
       status: "success",
-      message: `${menteeId.length} sertifikat sedang diproses di background.`,
+      message: `${menteesWithFeedback.length} dari ${menteeId.length} sertifikat berhasil diproses. Sisanya belum mengisi feedback.`,
     });
   },
 );

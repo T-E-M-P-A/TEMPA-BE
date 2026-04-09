@@ -1012,7 +1012,7 @@ export const getMateri = async (idProgram, idMentee) => {
 };
 
 // give feedback to program
-export const giveFeedbackProgram = async (idProgram, idMentee, reqBody) => {
+export const giveFeedbackProgram = async (idMentee, idProgram, reqBody) => {
   const { rating, feedback } = reqBody;
   const idProgramInt = parseInt(idProgram);
 
@@ -1033,6 +1033,11 @@ export const giveFeedbackProgram = async (idProgram, idMentee, reqBody) => {
     throw new AppError("Program tidak ditemukan.", 404);
   }
 
+  // const mId = Number(idMentee); // Pastikan ini hasilnya 1
+  // const pId = Number(idProgramInt); // Pastikan ini hasilnya 95
+
+  // console.log(`Mencari Progress untuk Mentee: ${mId} di Program: ${pId}`);
+
   // 2. Cek apakah mentee terdaftar di program tersebut
   const isEnrolled = await prisma.mentee_progress.findFirst({
     where: {
@@ -1040,6 +1045,7 @@ export const giveFeedbackProgram = async (idProgram, idMentee, reqBody) => {
       id_program: idProgramInt,
     },
   });
+  // console.log(isEnrolled);
 
   if (!isEnrolled) {
     throw new AppError("Anda tidak terdaftar di program ini.", 403);
