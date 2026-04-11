@@ -5,6 +5,7 @@ import prisma from "../../prisma/client.js";
 import formatPathToUrl from "../controllers/formatPathUrl.js";
 import generateContentWithRetry from "../controllers/generateContentWithRetry.js";
 import { AppError } from "../utils/customError.js";
+import mailQueue from "../lib/mailQueue.js";
 
 const client = new OAuth2Client(process.env.CLIENT_ID);
 const JWT_SECRET = process.env.JWT_SECRET;
@@ -497,80 +498,96 @@ export const registerProgram = async (idMentee, idProgramInt) => {
     throw new AppError("ID Program atau ID Mentee tidak ditemukan.", 404);
   }
 
-  // check if mentee is already register to program
-  const existingEnrollment = await prisma.mentee_progress.findFirst({
-    where: {
-      id_mentee: idMentee,
-      id_program: idProgramInt,
-    },
-  });
+  // 1. Jalankan Transaction sejak awal untuk keamanan data
+  return await prisma.$transaction(async (tx) => {
+    // A. Check existing enrollment (pindahkan ke dalam tx agar konsisten)
+    const existingEnrollment = await tx.mentee_progress.findFirst({
+      where: { id_mentee: idMentee, id_program: idProgramInt },
+    });
 
-  // if already register program
-  if (existingEnrollment) {
-    throw new AppError("Anda sudah mendaftar program tersebut!", 400);
-  }
+    if (existingEnrollment) {
+      throw new AppError("Anda sudah mendaftar program tersebut!", 400);
+    }
 
-  // Check program status and capacity
-  const programData = await prisma.program.findUnique({
-    where: {
-      id: idProgramInt,
-    },
-    select: {
-      capacity: true,
-      start_regis_date: true,
-      end_regis_date: true,
-      start_program_date: true,
-      end_program_date: true,
-    },
-  });
+    // B. Ambil data program & wallet secara detail (Locking mechanism)
+    const programData = await tx.program.findUnique({
+      where: { id: idProgramInt },
+      include: {
+        campus_program_id_campusTocampus: {
+          include: {
+            campus_wallet: true,
+          },
+        },
+      },
+    });
 
-  if (!programData) {
-    throw new AppError("Program tidak ditemukan.", 404);
-  }
+    if (!programData) throw new AppError("Program tidak ditemukan.", 404);
 
-  if (new Date(programData.start_regis_date) > new Date()) {
-    throw new AppError("Pendaftaran belum dibuka!", 400);
-  }
+    // C. Validasi Tanggal
+    const now = new Date();
+    if (new Date(programData.start_regis_date) > now)
+      throw new AppError("Pendaftaran belum dibuka!", 400);
+    if (new Date(programData.end_regis_date) < now)
+      throw new AppError("Pendaftaran sudah tutup!", 400);
 
-  if (new Date(programData.end_regis_date) < new Date()) {
-    throw new AppError("Pendaftaran sudah tutup!", 400);
-  }
+    // D. Validasi Kuota Fisik
+    if (programData.capacity <= 0) {
+      throw new AppError("Kuota program sudah penuh!", 400);
+    }
 
-  if (new Date(programData.end_program_date) < new Date()) {
-    throw new AppError("Program sudah tutup!", 400);
-  }
+    // E. Validasi Saldo Kampus (Penting!)
+    const wallet = programData.campus_program_id_campusTocampus.campus_wallet;
+    if (!wallet || Number(wallet.current_balance) < 15000) {
+      // Kita beri pesan kuota penuh agar mentee tidak bingung,
+      // padahal sebenarnya "kuota biaya" kampus habis.
+      throw new AppError(
+        "Kuota pendaftaran untuk program ini telah mencapai batas maksimal.",
+        400,
+      );
 
-  if (programData.capacity <= 0) {
-    throw new AppError("Kuota program sudah penuh!", 400);
-  }
+      // TODO: Kirim email notifikasi ke kampus di luar transaction (Background job)
+    }
 
-  // Register program and decrement capacity
-  const registerProgram = await prisma.$transaction(async (tx) => {
+    // F. Eksekusi Pengurangan & Pencatatan
     const newProgress = await tx.mentee_progress.create({
       data: {
         completion_status: "on_going",
-        completion_date: null,
         id_mentee: idMentee,
         id_program: idProgramInt,
-        create_at: new Date(),
+        create_at: now,
       },
     });
 
+    // Update Program (Kurangi Kapasitas)
     await tx.program.update({
       where: { id: idProgramInt },
+      data: { capacity: { decrement: 1 } },
+    });
+
+    // Update Wallet (Kurangi Saldo)
+    await tx.campus_wallet.update({
+      where: { id_campus: programData.id_campus },
       data: {
-        capacity: { decrement: 1 },
+        current_balance: { decrement: 15000 },
+        update_at: now,
       },
     });
 
-    return newProgress;
-  });
-  // console.log(registerProgram);
+    // Record Log
+    await tx.wallet_log.create({
+      data: {
+        id_campus: programData.id_campus,
+        amount: -15000,
+        type: "usage",
+        created_at: now,
+      },
+    });
 
-  return {
-    message: `Pendaftaran berhasil!`,
-    data: registerProgram,
-  };
+    return {
+      message: "Pendaftaran berhasil!",
+      data: newProgress,
+    };
+  });
 };
 
 // get majors

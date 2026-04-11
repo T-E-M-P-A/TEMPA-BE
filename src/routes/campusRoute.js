@@ -335,7 +335,6 @@ router.post(
 
     // console.log(menteeId);
 
-    // 1. Ambil data mentee yang HANYA sudah mengisi feedback untuk idProgram ini
     const menteesWithFeedback = await prisma.mentee.findMany({
       where: {
         id: {
@@ -354,7 +353,6 @@ router.post(
       },
     });
 
-    // 2. Validasi jika tidak ada mentee yang memenuhi syarat
     if (menteesWithFeedback.length === 0) {
       return res.status(400).send({
         status: "error",
@@ -363,7 +361,6 @@ router.post(
       });
     }
 
-    // 3. Ambil data campus seperti biasa
     const campus = await prisma.campus.findUnique({
       where: { id: idCampus },
       select: { campus_name: true },
@@ -380,7 +377,6 @@ router.post(
     });
     const campusName = campus?.campus_name || "Campus Team";
 
-    // 4. Proses hanya mentee yang lolos validasi (menteesWithFeedback)
     menteesWithFeedback.forEach((mentee) => {
       generateCertificateQueue
         .push({

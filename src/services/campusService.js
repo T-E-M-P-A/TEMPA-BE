@@ -988,6 +988,23 @@ export const createProgram = async (reqBody, idCampus, reqFile) => {
       throw new AppError("Jurusan tidak ditemukan atau bukan milik Anda.", 404);
     }
 
+    const getWallet = await prisma.campus_wallet.findFirst({
+      where: {
+        id_campus: idCampus,
+      },
+    });
+
+    const pricePerMentee = 15000;
+
+    const totalQuota =
+      pricePerMentee > 0
+        ? Math.floor(Number(getWallet.current_balance) / pricePerMentee)
+        : 0;
+
+    if (capacity > totalQuota) {
+      throw new AppError("Kuota peserta tidak mencukupi.", 400);
+    }
+
     // Helper JSON Parser
     const parseJsonOrWrapInArray = (value) => {
       if (typeof value === "string") {
@@ -1127,6 +1144,23 @@ export const updateProgram = async (idCampus, id, reqBody, reqFile) => {
         "Jurusan tersebut tidak terdaftar di kampus Anda.",
         404,
       );
+    }
+
+    const getWallet = await prisma.campus_wallet.findFirst({
+      where: {
+        id_campus: idCampus,
+      },
+    });
+
+    const pricePerMentee = 15000;
+
+    const totalQuota =
+      pricePerMentee > 0
+        ? Math.floor(Number(getWallet.current_balance) / pricePerMentee)
+        : 0;
+
+    if (capacity > totalQuota) {
+      throw new AppError("Kuota peserta tidak mencukupi.", 400);
     }
 
     // Helper untuk menangani field yang bisa berupa string atau array dari FormData
