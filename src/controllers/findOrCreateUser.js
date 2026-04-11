@@ -4,6 +4,7 @@ import prisma from "./../../prisma/client.js";
  * @param {object} userData - User data from payload Google
  * @returns {Promise<object>} - User objects (discovered or newly created), including local user_id.
  */
+// for mentee
 export async function findOrCreateUser(userData) {
   const { sub: googleSubId, email, name } = userData;
 
@@ -33,6 +34,7 @@ export async function findOrCreateUser(userData) {
   return user;
 }
 
+// for campus
 export async function findOrCreateCampus(userData) {
   const { sub: googleSubId, email, name } = userData;
 
@@ -52,6 +54,13 @@ export async function findOrCreateCampus(userData) {
         email: email,
         verification_status: "null",
         // verification_status: "accepted",
+      },
+    });
+
+    const createBalance = await prisma.campus_wallet.create({
+      data: {
+        id_campus: user.id,
+        balance: 0,
       },
     });
 

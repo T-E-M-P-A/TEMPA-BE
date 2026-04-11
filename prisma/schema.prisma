@@ -75,11 +75,13 @@ model campus {
   seen                              Int                        @default(0)
   sub_google_id                     String                     @unique
   campus_subscription               campus_subscription[]
+  campus_wallet                     campus_wallet?
   major                             major[]
   mentor                            mentor[]
   program_program_id_campusTocampus program[]                  @relation("program_id_campusTocampus")
   transaction                       transaction[]
   view_log_campus                   view_log_campus[]
+  wallet_log                        wallet_log[]
 }
 
 model standard_major {
@@ -274,7 +276,7 @@ model view_log_campus {
 
 model campus_subscription {
   id                   Int                        @id @default(autoincrement())
-  doku_invoice         Int
+  invoice_no           String                     @unique(map: "invoice_no") @db.VarChar(225)
   status               campus_subscription_status
   id_campus            Int
   id_package           Int
@@ -310,7 +312,7 @@ model subscription_package {
 model transaction {
   id                   Int                  @id @default(autoincrement())
   transaction_date     DateTime             @db.Timestamp(0)
-  doku_invoice_no      String?              @db.VarChar(100)
+  invoice_no           String               @unique(map: "invoice_no") @db.VarChar(100)
   payment_channel      String?              @db.VarChar(50)
   status               transaction_status
   id_campus            Int
@@ -341,6 +343,28 @@ model mentee_attendance {
 
   @@index([id_mentee, id_program], map: "id_mentee")
   @@index([id_program], map: "id_program")
+}
+
+model campus_wallet {
+  id                  Int       @id @default(autoincrement())
+  id_campus           Int       @unique(map: "id_campus_2")
+  current_balance     BigInt
+  last_transaction_id Int?
+  update_at           DateTime? @db.Timestamp(0)
+  campus              campus    @relation(fields: [id_campus], references: [id], onDelete: NoAction, map: "campus_wallet_ibfk_1")
+
+  @@index([id_campus], map: "id_campus")
+}
+
+model wallet_log {
+  id         Int             @id @default(autoincrement())
+  id_campus  Int
+  amount     BigInt
+  type       wallet_log_type
+  created_at DateTime        @db.Timestamp(0)
+  campus     campus          @relation(fields: [id_campus], references: [id], onDelete: NoAction, map: "wallet_log_ibfk_1")
+
+  @@index([id_campus], map: "id_campus")
 }
 
 enum visibility_materi {
@@ -405,15 +429,20 @@ enum campus_subscription_status {
   cancelled
 }
 
-enum transaction_status {
-  pending
-  paid
-  failed
-  expired
-}
-
 enum mentee_attendance_status {
   present
   absent
   null
+}
+
+enum wallet_log_type {
+  topup
+  usage
+}
+
+enum transaction_status {
+  pending
+  paid
+  cancelled
+  expired
 }
