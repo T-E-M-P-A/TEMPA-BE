@@ -310,21 +310,22 @@ model subscription_package {
 }
 
 model transaction {
-  id                   Int                  @id @default(autoincrement())
-  transaction_date     DateTime             @db.Timestamp(0)
-  invoice_no           String               @unique(map: "invoice_no") @db.VarChar(100)
-  payment_channel      String?              @db.VarChar(50)
+  id                   Int                      @id @default(autoincrement())
+  transaction_date     DateTime                 @db.Timestamp(0)
+  invoice_no           String                   @unique(map: "invoice_no") @db.VarChar(100)
+  payment_channel      String?                  @db.VarChar(50)
   status               transaction_status
   id_campus            Int
-  transaction_no       String               @db.VarChar(50)
-  id_package           Int
+  transaction_no       String                   @db.VarChar(50)
+  id_package           Int?
   free_trial           Boolean
   amount_original      BigInt
   amount_final         BigInt
-  duration_month       Int
-  paid_at              DateTime             @db.Timestamp(0)
-  campus               campus               @relation(fields: [id_campus], references: [id], onDelete: NoAction, map: "transaction_ibfk_1")
-  subscription_package subscription_package @relation(fields: [id_package], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "transaction_ibfk_2")
+  duration_month       Int?
+  paid_at              DateTime                 @db.Timestamp(0)
+  type_payment         transaction_type_payment
+  campus               campus                   @relation(fields: [id_campus], references: [id], onDelete: NoAction, map: "transaction_ibfk_1")
+  subscription_package subscription_package?    @relation(fields: [id_package], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "transaction_ibfk_2")
 
   @@index([id_campus], map: "id_campus")
   @@index([id_package], map: "id_package")
@@ -445,4 +446,9 @@ enum transaction_status {
   paid
   cancelled
   expired
+}
+
+enum transaction_type_payment {
+  subscription
+  topup
 }
