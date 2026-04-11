@@ -291,5 +291,56 @@ router.get(
     }
   },
 );
+router.get(
+  "/get-history-transaction",
+  authenticateUser,
+  authorizeRoles(["campus"]),
+  async (req, res) => {
+    const idCampus = req.user.id;
+
+    try {
+      const getWalletLog = await prisma.wallet_log.findMany({
+        where: {
+          id_campus: idCampus,
+        },
+        orderBy: {
+          created_at: "desc",
+        },
+      });
+
+      if (getWalletLog.length === 0) {
+        return res.status(200).json({
+          // Gunakan 200, karena list kosong bukan berarti error/404
+          statusCode: 200,
+          messages: "Belum ada riwayat transaksi.",
+          data: [],
+        });
+      }
+
+      const formattedData = getWalletLog.map((log) => ({
+        id: log.id,
+        id_campus: log.id_campus,
+        amount: Number(log.amount),
+        type: log.type,
+        created_at: log.created_at,
+        // Tips: Tambahkan status/label untuk mempermudah frontend
+        is_money_out: Number(log.amount) < 0,
+      }));
+
+      return res.status(200).json({
+        statusCode: 200,
+        messages: "success",
+        data: formattedData,
+      });
+    } catch (error) {
+      console.error("Error Get Wallet Log:", error);
+
+      return res.status(500).json({
+        statusCode: 500,
+        messages: "Terjadi kesalahan internal pada server.",
+      });
+    }
+  },
+);
 
 export default router;
