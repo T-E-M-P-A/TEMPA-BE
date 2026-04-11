@@ -810,11 +810,29 @@ router.post(
           id: true,
         },
       });
+
       if (!major) {
         if (req.file) fs.unlinkSync(req.file.path);
         return res.status(404).json({
-          message: `Jurusan dengan ID '${majorId}' tidak ditemukan atau bukan milik kampus Anda.`,
+          message: `Jurusan tidak ditemukan atau bukan milik kampus Anda.`,
         });
+      }
+
+      const getWallet = await prisma.campus_wallet.findFirst({
+        where: {
+          id_campus: idCampus,
+        },
+      });
+
+      const pricePerMentee = 15000;
+
+      const totalQuota =
+        pricePerMentee > 0
+          ? Math.floor(Number(getWallet.current_balance) / pricePerMentee)
+          : 0;
+
+      if (capacity > totalQuota) {
+        throw new AppError("Kuota peserta tidak mencukupi.", 400);
       }
 
       // 4. Konversi tipe data & Helper parsing
@@ -983,7 +1001,7 @@ router.put(
           id_campus: mentorData.id_campus,
         },
       });
-      console.log(existingProgram);
+      // console.log(existingProgram);
 
       if (!existingProgram) {
         return res.status(404).json({
@@ -1009,6 +1027,23 @@ router.put(
         return res.status(404).json({
           message: `Jurusan dengan ID '${majorId}' tidak ditemukan atau bukan milik kampus program ini.`,
         });
+      }
+
+      const getWallet = await prisma.campus_wallet.findFirst({
+        where: {
+          id_campus: mentorData.id_campus,
+        },
+      });
+
+      const pricePerMentee = 15000;
+
+      const totalQuota =
+        pricePerMentee > 0
+          ? Math.floor(Number(getWallet.current_balance) / pricePerMentee)
+          : 0;
+
+      if (capacity > totalQuota) {
+        throw new AppError("Kuota peserta tidak mencukupi.", 400);
       }
 
       // Helper untuk menangani field yang bisa berupa string atau array dari FormData
@@ -2273,6 +2308,84 @@ router.put(
       return res.status(500).json({
         message: "Terjadi kesalahan server saat memperbarui data.",
         error: error.message,
+      });
+    }
+  },
+);
+
+router.get(
+  "/get-balance",
+  authenticateUser,
+  authorizeRoles(["mentor"]),
+  async (req, res) => {
+    const idMentor = req.user.id;
+
+    // console.log(idMentor);
+
+    try {
+      const getCampus = await prisma.mentor.findUnique({
+        where: {
+          id: idMentor,
+        },
+      });
+
+      const [getBalance, getSubscriptionCampus] = await Promise.all([
+        prisma.campus_wallet.findUnique({
+          where: { id_campus: getCampus.id_campus },
+        }),
+        prisma.campus_subscription.findFirst({
+          where: { id_campus: getCampus.id_campus, status: "active" },
+        }),
+      ]);
+
+      if (!getBalance) {
+        return res.status(404).json({
+          statusCode: 404,
+          messages: "Dompet kampus tidak ditemukan. Silakan hubungi admin.",
+        });
+      }
+
+      if (!getSubscriptionCampus) {
+        return res.status(200).json({
+          statusCode: 200,
+          messages: "Kampus belum memiliki paket langganan aktif.",
+          data: {
+            balance: Number(getBalance.current_balance),
+            quota_mentee: 0,
+          },
+        });
+      }
+
+      // price per mentee
+      const menteePriceMap = {
+        1: 15000, // Paket Berkembang
+        2: 20000, // Paket Eksklusif
+      };
+
+      // const packageId = getSubscriptionPackage.id;
+      const pricePerMentee = 15000;
+
+      const totalQuota =
+        pricePerMentee > 0
+          ? Math.floor(Number(getBalance.current_balance) / pricePerMentee)
+          : 0;
+
+      const data = {
+        balance: Number(getBalance.current_balance),
+        quota_mentee: totalQuota,
+      };
+
+      return res.status(200).json({
+        statusCode: 200,
+        messages: "success",
+        data: data,
+      });
+    } catch (error) {
+      console.error(`[GetBalance Error] Campus ID ${idCampus}:`, error);
+
+      return res.status(500).json({
+        statusCode: 500,
+        messages: "Terjadi kesalahan internal pada server.",
       });
     }
   },

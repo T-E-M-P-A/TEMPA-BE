@@ -221,7 +221,7 @@ router.post("/webhook-paymentku", async (req, res) => {
   res.status(200).json({ statusCode: 200, messages: "success" });
 });
 
-// get balance
+// get balance for campus
 router.get(
   "/get-balance",
   authenticateUser,

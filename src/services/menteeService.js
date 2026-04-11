@@ -251,15 +251,12 @@ export const detailProgram = async (idProgram) => {
     },
     include: {
       campus_program_id_campusTocampus: {
-        select: {
-          id: true,
-          campus_name: true,
-          province: true,
-          city: true,
-          email: true,
-          path_logo: true,
-          path_banner: true,
-          badge: true,
+        include: {
+          campus_wallet: {
+            select: {
+              current_balance: true,
+            },
+          },
         },
       },
       campus_program_id_majorTocampus: {
@@ -286,6 +283,12 @@ export const detailProgram = async (idProgram) => {
 
   const item = detailProgram;
 
+  const wallet = item.campus_program_id_campusTocampus.campus_wallet;
+  const currentBalance = wallet ? Number(wallet.current_balance) : 0;
+
+  // Tentukan apakah pendaftaran ditutup secara sistem (saldo < 15000)
+  const isClosedByBalance = currentBalance < 15000;
+
   const majorName =
     item.campus_program_id_majorTocampus.standard_major.major_name;
 
@@ -306,6 +309,14 @@ export const detailProgram = async (idProgram) => {
 
   // 3. BUAT OBJEK HASIL AKHIR (formatGetDetailProgram)
   const formatGetDetailProgram = { ...item };
+
+  // check balance
+  formatGetDetailProgram.is_registration_closed = isClosedByBalance;
+
+  if (formatGetDetailProgram.campus_program_id_campusTocampus.campus_wallet) {
+    delete formatGetDetailProgram.campus_program_id_campusTocampus
+      .campus_wallet;
+  }
 
   formatGetDetailProgram.major_name = majorName;
   delete formatGetDetailProgram.campus_program_id_majorTocampus;
