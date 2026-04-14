@@ -285,6 +285,7 @@ router.post("/webhook-paymentku", async (req, res) => {
             id_package: updateTransaction.id_package,
             start_date: startDate,
             expired_date: expiredDate,
+            updated_at: new Date(),
           },
         });
 
