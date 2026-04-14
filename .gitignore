@@ -24,3 +24,6 @@ venv_pddikti/
 node_modules/
 
 package-lock.json
+
+.well-known/
+.htaccess
