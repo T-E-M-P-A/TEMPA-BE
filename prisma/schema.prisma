@@ -74,7 +74,7 @@ model campus {
   badge                             Boolean                    @default(false)
   seen                              Int                        @default(0)
   sub_google_id                     String                     @unique
-  campus_subscription               campus_subscription[]
+  campus_subscription               campus_subscription?
   campus_wallet                     campus_wallet?
   major                             major[]
   mentor                            mentor[]
@@ -278,7 +278,7 @@ model campus_subscription {
   id                   Int                        @id @default(autoincrement())
   invoice_no           String                     @unique(map: "invoice_no") @db.VarChar(225)
   status               campus_subscription_status
-  id_campus            Int
+  id_campus            Int                        @unique(map: "id_campus_2")
   id_package           Int
   start_date           DateTime                   @db.Timestamp(0)
   expired_date         DateTime                   @db.Timestamp(0)
