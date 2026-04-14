@@ -6,7 +6,9 @@ uploads/majors_images/banner/*
 uploads/majors_images/logo/*
 uploads/campus_images/banner/*
 uploads/campus_images/logo/*
+output/*
 
+!output/.gitkeep
 !uploads/program_materi/.gitkeep
 !uploads/majors_images/banner/.gitkeep
 !uploads/majors_images/logo/.gitkeep

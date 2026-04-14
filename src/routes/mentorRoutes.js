@@ -37,7 +37,7 @@ const uploadProgramImage = multer({
   fileFilter: (req, file, cb) => {
     const fileTypes = /jpeg|jpg|png|gif/;
     const extname = fileTypes.test(
-      path.extname(file.originalname).toLowerCase()
+      path.extname(file.originalname).toLowerCase(),
     );
     const mimetype = fileTypes.test(file.mimetype);
     if (mimetype && extname) {
@@ -97,7 +97,7 @@ const campusImageStorage = multer.diskStorage({
       null,
       `campus-${file.fieldname}-` +
         uniqueSuffix +
-        path.extname(file.originalname)
+        path.extname(file.originalname),
     );
   },
 });
@@ -108,7 +108,7 @@ const uploadCampusImages = multer({
   fileFilter: (req, file, cb) => {
     const fileTypes = /jpeg|jpg|png|gif/;
     const extname = fileTypes.test(
-      path.extname(file.originalname).toLowerCase()
+      path.extname(file.originalname).toLowerCase(),
     );
     const mimetype = fileTypes.test(file.mimetype);
     if (mimetype && extname) return cb(null, true);
@@ -116,12 +116,14 @@ const uploadCampusImages = multer({
   },
 });
 
-// login admin
+// login mentor
 router.post("/login-mentor", async (req, res) => {
-  const { nik, password } = req.body;
+  const { email, password } = req.body;
+
+  console.log(req.body);
 
   //   check if username and password null
-  if (!nik || !password) {
+  if (!email || !password) {
     return res.status(400).json({
       message: "Username or Password not found!",
     });
@@ -131,7 +133,7 @@ router.post("/login-mentor", async (req, res) => {
     // search nik mentor
     const mentor = await prisma.mentor.findUnique({
       where: {
-        nik: nik,
+        email: email,
       },
     });
 
@@ -157,12 +159,12 @@ router.post("/login-mentor", async (req, res) => {
       {
         id: mentor.id,
         username: mentor.name,
-        nik: mentor.nik,
+        email: mentor.email,
         mentorType: mentor.mentor_type,
         role: "mentor",
       },
       JWT_SECRET,
-      { expiresIn: "1d" } // expired in 1 day
+      { expiresIn: "1d" }, // expired in 1 day
     );
 
     return res.status(200).json({
@@ -186,34 +188,65 @@ router.get(
   async (req, res) => {
     const idMentor = req.user.id;
     try {
-      const getProgramCampus = await prisma.program_mentor.findMany({
+      // 1. PERBAIKAN: Gunakan 'id', bukan 'id_mentor'
+      const mentorData = await prisma.mentor.findUnique({
         where: {
-          id_mentor: idMentor,
+          id: idMentor,
         },
         select: {
-          program: {
-            select: {
-              id: true,
-              program_name: true,
-              _count: {
-                select: {
-                  mentee_progress: true,
+          id_campus: true,
+          mentor_type: true,
+        },
+      });
+
+      if (!mentorData) {
+        return res.status(404).json({ message: "Mentor tidak ditemukan" });
+      }
+
+      // 2. PERBAIKAN: Gunakan 'let', jangan 'const' karena variabel ini akan diisi ulang
+      let getProgramCampus = [];
+
+      if (mentorData.mentor_type === "default") {
+        const programMentors = await prisma.program_mentor.findMany({
+          where: {
+            id_mentor: idMentor,
+          },
+          select: {
+            program: {
+              select: {
+                id: true,
+                program_name: true,
+                _count: {
+                  select: { mentee_progress: true },
                 },
               },
             },
           },
-        },
-      });
+        });
+        // Map agar strukturnya seragam dengan findMany program langsung
+        getProgramCampus = programMentors.map((pm) => pm.program);
+      } else {
+        // Jika super_mentor, ambil semua program di kampus tersebut
+        getProgramCampus = await prisma.program.findMany({
+          where: {
+            id_campus: mentorData.id_campus,
+          },
+          select: {
+            id: true,
+            program_name: true,
+            _count: {
+              select: { mentee_progress: true },
+            },
+          },
+        });
+      }
 
-      // get count total mentee
-      const programsWithMenteeCount = getProgramCampus.map((item) => ({
-        id: item.program.id,
-        program_name: item.program.program_name,
-        // Total mentee diambil dari hasil perhitungan _count
-        total_mentee: item.program._count.mentee_progress,
+      // 3. PERBAIKAN: Mapping data akhir
+      const programsWithMenteeCount = getProgramCampus.map((program) => ({
+        id: program.id,
+        program_name: program.program_name,
+        total_mentee: program._count?.mentee_progress || 0,
       }));
-
-      console.log(programsWithMenteeCount);
 
       return res.status(200).json({
         message: "Data program beserta total mentee berhasil diambil",
@@ -227,7 +260,7 @@ router.get(
         error: error.message,
       });
     }
-  }
+  },
 );
 
 // get program by mentor id
@@ -326,7 +359,7 @@ router.get(
         return newItem;
       });
 
-      console.log(formattedPrograms);
+      // console.log(formattedPrograms);
 
       return res.status(200).json({
         message: "Berhasil mengambil data program mentor",
@@ -339,7 +372,7 @@ router.get(
         error: error.message,
       });
     }
-  }
+  },
 );
 
 // get detail program by id for mentor
@@ -368,7 +401,9 @@ router.get(
       const getCampusSubscription = await prisma.campus_subscription.findFirst({
         where: {
           id_campus: mentorData.id_campus,
-          id_package: 2,
+          id_package: {
+            in: [1, 2],
+          },
           expired_date: {
             gte: new Date(),
           },
@@ -412,14 +447,13 @@ router.get(
               },
             },
           },
-          // ✅ TAMBAHKAN MATERI PROGRAM
+
           materi: {
             select: {
               id: true,
               title: true,
               description: true,
               visibility: true,
-              // Anda bisa tambahkan materi_resource jika perlu detail file
               materi_resource: {
                 select: {
                   type: true,
@@ -428,15 +462,16 @@ router.get(
               },
             },
           },
-          // ✅ TAMBAHKAN PROGRESS MENTEE (PESERTA)
+
+          // get mentee where register program
           mentee_progress: {
             select: {
               completion_status: true,
               final_score: true,
               create_at: true,
               mentee: {
-                // Relasi ke detail mentee
                 select: {
+                  id: true,
                   username: true,
                   email: true,
                   gender: true,
@@ -444,7 +479,18 @@ router.get(
               },
             },
           },
-          // ✅ TAMBAHKAN COUNT UNTUK TOTAL PESERTA TERDAFTAR
+          mentee_attendance: {
+            where: {
+              id_program: parsedIdProgram,
+            },
+            select: {
+              id: true,
+              status: true,
+              attendance_date: true,
+              id_mentee: true,
+              id_program: true,
+            },
+          },
           _count: {
             select: {
               mentee_progress: true,
@@ -537,24 +583,40 @@ router.get(
       const formattedDetail = {
         ...item,
         image_url: imageUrl,
+        seen: !getCampusSubscription ? false : detailProgram.seen,
         major_name:
           item.campus_program_id_majorTocampus?.standard_major?.major_name ||
           null,
         registered_mentees: item._count?.mentee_progress || 0,
-        idCampus: getCampusSubscription?.id_campus || null,
-        free_trial: getCampusSubscription ? false : true,
         // format data for mentee list
-        mentee_list: item.mentee_progress.map((mp) => ({
-          id: mp.mentee?.id,
-          username: mp.mentee?.username,
-          email: mp.mentee?.email,
-          gender: mp.mentee?.gender,
-          completion_status: mp.completion_status,
-          final_score: mp.final_score,
-          create_at: mp.create_at,
-          city_distribution: formattedCityDistribution,
-          education_status_distribution: formattedEducationStatus,
-        })),
+        free_trial: getCampusSubscription ? true : false,
+        send_mail: getCampusSubscription?.id_package === 2 ? true : false,
+        mentee_list: item.mentee_progress.map((mp) => {
+          // 1. Ambil ID mentee saat ini
+          const currentMenteeId = mp.mentee?.id;
+
+          // 2. Filter data presensi dari array besar 'mentee_attendance'
+          // yang hanya milik mentee ini
+          const specificAttendance = item.mentee_attendance.filter(
+            (attendance) => attendance.id_mentee === currentMenteeId,
+          );
+
+          return {
+            id: currentMenteeId,
+            username: mp.mentee?.username,
+            email:
+              getCampusSubscription?.id_package === 2 ? mp.mentee?.email : null,
+            gender: mp.mentee?.gender,
+            completion_status: mp.completion_status,
+            final_score: mp.final_score,
+            create_at: mp.create_at,
+            city_distribution: formattedCityDistribution,
+            education_status_distribution: formattedEducationStatus,
+
+            // 3. Masukkan data presensi yang sudah difilter ke dalam objek mentee
+            attendance_list: specificAttendance,
+          };
+        }),
         // format data for matery
         materi_list: formattedMateriList,
         mentor_list: item.program_mentor.map((pm) => ({
@@ -578,6 +640,8 @@ router.get(
       delete formattedDetail.mentee_progress;
       delete formattedDetail.materi; // Hapus materi mentah
 
+      console.log(formattedDetail);
+
       return res.status(200).json({
         message: "Detail program berhasil ditemukan.",
         data: formattedDetail,
@@ -589,7 +653,57 @@ router.get(
         error: error.message,
       });
     }
-  }
+  },
+);
+
+// update expired presensi
+router.put(
+  "/update-expired-presensi-mentor/:idProgram",
+  authenticateUser,
+  authorizeRoles(["mentor"]),
+  async (req, res) => {
+    try {
+      const programId = parseInt(req.params.idProgram);
+      const { expiredPresensi } = req.body;
+
+      // console.log(expiredPresensi);
+
+      if (!Array.isArray(expiredPresensi)) {
+        // throw new AppError("Format data presensi tidak valid", 400);
+        return res.status(400).json({
+          message: "Format data presensi tidak valid",
+        });
+      }
+
+      if (!programId) {
+        // throw new AppError("Program tidak ditemukan", 404);
+        return res.status(404).json({
+          message: "Program tidak ditemukan",
+        });
+      }
+
+      const updateExpiredPresensi = await prisma.program.update({
+        where: {
+          id: programId,
+        },
+        data: {
+          expired_presensi: expiredPresensi,
+        },
+      });
+
+      return res.status(200).json({
+        message: "Expired presensi berhasil diperbarui",
+        data: updateExpiredPresensi,
+      });
+    } catch (error) {
+      return res
+        .status(500)
+        .json(
+          "Terjadi kesalahan server saat memperbarui expired presensi.",
+          error,
+        );
+    }
+  },
 );
 
 // create program for mentor
@@ -696,11 +810,29 @@ router.post(
           id: true,
         },
       });
+
       if (!major) {
         if (req.file) fs.unlinkSync(req.file.path);
         return res.status(404).json({
-          message: `Jurusan dengan ID '${majorId}' tidak ditemukan atau bukan milik kampus Anda.`,
+          message: `Jurusan tidak ditemukan atau bukan milik kampus Anda.`,
         });
+      }
+
+      const getWallet = await prisma.campus_wallet.findFirst({
+        where: {
+          id_campus: idCampus,
+        },
+      });
+
+      const pricePerMentee = 15000;
+
+      const totalQuota =
+        pricePerMentee > 0
+          ? Math.floor(Number(getWallet.current_balance) / pricePerMentee)
+          : 0;
+
+      if (capacity > totalQuota) {
+        throw new AppError("Kuota peserta tidak mencukupi.", 400);
       }
 
       // 4. Konversi tipe data & Helper parsing
@@ -811,7 +943,7 @@ router.post(
         error: error.message,
       });
     }
-  }
+  },
 );
 
 // edit program by id for mentor
@@ -869,7 +1001,7 @@ router.put(
           id_campus: mentorData.id_campus,
         },
       });
-      console.log(existingProgram);
+      // console.log(existingProgram);
 
       if (!existingProgram) {
         return res.status(404).json({
@@ -895,6 +1027,23 @@ router.put(
         return res.status(404).json({
           message: `Jurusan dengan ID '${majorId}' tidak ditemukan atau bukan milik kampus program ini.`,
         });
+      }
+
+      const getWallet = await prisma.campus_wallet.findFirst({
+        where: {
+          id_campus: mentorData.id_campus,
+        },
+      });
+
+      const pricePerMentee = 15000;
+
+      const totalQuota =
+        pricePerMentee > 0
+          ? Math.floor(Number(getWallet.current_balance) / pricePerMentee)
+          : 0;
+
+      if (capacity > totalQuota) {
+        throw new AppError("Kuota peserta tidak mencukupi.", 400);
       }
 
       // Helper untuk menangani field yang bisa berupa string atau array dari FormData
@@ -929,7 +1078,7 @@ router.put(
         if (existingProgram.path_gambar) {
           const oldImagePath = path.join(
             process.cwd(),
-            existingProgram.path_gambar
+            existingProgram.path_gambar,
           );
           if (fs.existsSync(oldImagePath)) {
             fs.unlink(oldImagePath, (err) => {
@@ -937,7 +1086,7 @@ router.put(
                 console.error(
                   "Gagal menghapus gambar lama:",
                   oldImagePath,
-                  err
+                  err,
                 );
             });
           }
@@ -984,7 +1133,7 @@ router.put(
           if (err)
             console.error(
               "Gagal menghapus file yang baru diunggah setelah error:",
-              err
+              err,
             );
         });
       }
@@ -998,7 +1147,7 @@ router.put(
         error: error.message,
       });
     }
-  }
+  },
 );
 
 // get major for form major
@@ -1031,7 +1180,7 @@ router.get(
         .status(500)
         .json({ message: "Not Found due to internal error." });
     }
-  }
+  },
 );
 
 // get major campus
@@ -1082,7 +1231,7 @@ router.get(
         message: "Terjadi kesalahan server saat mengambil data jurusan.",
       });
     }
-  }
+  },
 );
 
 // add majors to campus for mentor
@@ -1128,7 +1277,7 @@ router.post(
       const newStandardMajorIds = new Set(
         newMajorsFromRequest
           .map((major) => major.id)
-          .filter((id) => typeof id === "number")
+          .filter((id) => typeof id === "number"),
       );
 
       // Ambil semua jurusan yang saat ini terdaftar untuk kampus ini
@@ -1137,15 +1286,15 @@ router.post(
         select: { id_standard_major: true },
       });
       const existingStandardMajorIds = new Set(
-        existingMajors.map((major) => major.id_standard_major)
+        existingMajors.map((major) => major.id_standard_major),
       );
 
       // Tentukan jurusan mana yang akan ditambahkan dan dihapus
       const idsToAdd = [...newStandardMajorIds].filter(
-        (id) => !existingStandardMajorIds.has(id)
+        (id) => !existingStandardMajorIds.has(id),
       );
       const idsToRemove = [...existingStandardMajorIds].filter(
-        (id) => !newStandardMajorIds.has(id)
+        (id) => !newStandardMajorIds.has(id),
       );
 
       // Gunakan transaksi untuk memastikan semua operasi berhasil atau tidak sama sekali
@@ -1187,7 +1336,7 @@ router.post(
         error: error.message,
       });
     }
-  }
+  },
 );
 
 // =======================================================================
@@ -1223,24 +1372,41 @@ router.post(
     }
 
     try {
-      // 1. Verifikasi Kepemilikan Program (Mentor assigned to program)
+      // 1. Ambil data mentor untuk cek tipenya
+      const mentor = await prisma.mentor.findUnique({
+        where: { id: idMentor },
+        select: { mentor_type: true },
+      });
+
+      if (!mentor) {
+        if (req.file && fs.existsSync(req.file.path))
+          fs.unlinkSync(req.file.path);
+        return res.status(404).json({ message: "Mentor tidak ditemukan." });
+      }
+
+      const isSuperMentor = mentor.mentor_type === "super_mentor";
+
       const program = await prisma.program.findFirst({
         where: {
           id: idProgramInt,
-          program_mentor: {
-            some: {
-              id_mentor: idMentor,
-            },
-          },
+          // Kondisi AND: Jika BUKAN super_mentor, maka WAJIB ada di program_mentor
+          ...(isSuperMentor
+            ? {}
+            : {
+                program_mentor: {
+                  some: { id_mentor: idMentor },
+                },
+              }),
         },
       });
 
       if (!program) {
-        if (req.file && fs.existsSync(req.file.path)) {
+        if (req.file && fs.existsSync(req.file.path))
           fs.unlinkSync(req.file.path);
-        }
         return res.status(404).json({
-          message: "Program tidak ditemukan atau Anda tidak memiliki akses.",
+          message: isSuperMentor
+            ? "Program tidak ditemukan."
+            : "Program tidak ditemukan atau Anda tidak memiliki akses ke program ini.",
         });
       }
 
@@ -1313,7 +1479,7 @@ router.post(
         error: error.message,
       });
     }
-  }
+  },
 );
 
 // =======================================================================
@@ -1354,36 +1520,46 @@ router.put(
     }
 
     try {
-      // 1. Cari Materi dan Verifikasi Kepemilikan
+      // 1. Ambil data mentor untuk cek tipenya (Super Mentor check)
+      const mentor = await prisma.mentor.findUnique({
+        where: { id: idMentor },
+        select: { mentor_type: true },
+      });
+
+      if (!mentor) {
+        cleanupFiles(req.files);
+        return res.status(404).json({ message: "Mentor tidak ditemukan." });
+      }
+
+      const isSuperMentor = mentor.mentor_type === "super_mentor";
+
+      // 2. Cari Materi dan Verifikasi Kepemilikan
       const materi = await prisma.materi.findFirst({
-        where: { id: idMateriInt },
-        include: {
-          program: {
-            include: {
-              program_mentor: {
-                where: {
-                  id_mentor: idMentor,
+        where: {
+          id: idMateriInt,
+          // Logika Akses:
+          ...(isSuperMentor
+            ? {} // Super mentor bisa akses materi di program manapun
+            : {
+                program: {
+                  program_mentor: {
+                    some: { id_mentor: idMentor },
+                  },
                 },
-              },
-            },
-          },
+              }),
+        },
+        include: {
+          program: true,
           materi_resource: true,
         },
       });
 
       if (!materi) {
         cleanupFiles(req.files);
-        return res.status(404).json({ message: "Materi tidak ditemukan." });
-      }
-
-      // Verifikasi apakah mentor terdaftar di program materi ini
-      const isMentorAssigned =
-        materi.program && materi.program.program_mentor.length > 0;
-
-      if (!isMentorAssigned) {
-        cleanupFiles(req.files);
-        return res.status(403).json({
-          message: "Anda tidak memiliki akses untuk mengedit materi ini.",
+        return res.status(404).json({
+          message: isSuperMentor
+            ? "Materi tidak ditemukan."
+            : "Materi tidak ditemukan atau Anda tidak memiliki akses untuk mengedit materi ini.",
         });
       }
 
@@ -1424,7 +1600,7 @@ router.put(
         req.files.forEach((file) => {
           // Fieldname format: new_resources[0][file]
           const match = file.fieldname.match(
-            /^new_resources\[(\d+)\]\[file\]$/
+            /^new_resources\[(\d+)\]\[file\]$/,
           );
           if (match) {
             setResourceData(match[1], "file", file);
@@ -1435,7 +1611,7 @@ router.put(
       const newResources = Object.values(newResourcesMap);
       // Filter resource yang memiliki type ATAU memiliki file (jika type lupa dikirim)
       const validNewResources = newResources.filter(
-        (res) => res.type || res.file
+        (res) => res.type || res.file,
       );
 
       // 3. Kelola Resource Lama (Keep dan Delete)
@@ -1444,11 +1620,11 @@ router.put(
       if (req.body.kept_resource_ids) {
         if (Array.isArray(req.body.kept_resource_ids)) {
           keptResourceIds = req.body.kept_resource_ids.map((id) =>
-            parseInt(id, 10)
+            parseInt(id, 10),
           );
         } else if (typeof req.body.kept_resource_ids === "object") {
           keptResourceIds = Object.values(req.body.kept_resource_ids).map(
-            (id) => parseInt(id, 10)
+            (id) => parseInt(id, 10),
           );
         } else {
           keptResourceIds = [parseInt(req.body.kept_resource_ids, 10)];
@@ -1484,7 +1660,7 @@ router.put(
               const existingRes = materi.materi_resource.find(
                 (r) =>
                   r.type === "file" &&
-                  normalizeResourcePath(r.path_file) === normalizedUrl
+                  normalizeResourcePath(r.path_file) === normalizedUrl,
               );
 
               if (existingRes) {
@@ -1534,7 +1710,7 @@ router.put(
 
       const existingResourceIds = materi.materi_resource.map((r) => r.id);
       const resourcesToDeleteIds = existingResourceIds.filter(
-        (id) => !keptResourceIds.includes(id)
+        (id) => !keptResourceIds.includes(id),
       );
 
       const keptCount = keptResourceIds.length;
@@ -1549,22 +1725,22 @@ router.put(
 
       const newResourcePaths = resourcesToCreate.map((r) => r.path_file);
       const resourcesToDelete = materi.materi_resource.filter((r) =>
-        resourcesToDeleteIds.includes(r.id)
+        resourcesToDeleteIds.includes(r.id),
       );
 
       const idsToRescue = resourcesToDelete
         .filter(
-          (r) => r.type === "file" && newResourcePaths.includes(r.path_file)
+          (r) => r.type === "file" && newResourcePaths.includes(r.path_file),
         )
         .map((r) => r.id);
 
       const finalResourcesToDeleteIds = resourcesToDeleteIds.filter(
-        (id) => !idsToRescue.includes(id)
+        (id) => !idsToRescue.includes(id),
       );
 
       if (finalResourcesToDeleteIds.length > 0) {
         const deletedFileResources = materi.materi_resource.filter(
-          (r) => r.type === "file" && finalResourcesToDeleteIds.includes(r.id)
+          (r) => r.type === "file" && finalResourcesToDeleteIds.includes(r.id),
         );
 
         for (const res of deletedFileResources) {
@@ -1576,7 +1752,7 @@ router.put(
           });
 
           const isReusedInNew = resourcesToCreate.some(
-            (newRes) => newRes.path_file === res.path_file
+            (newRes) => newRes.path_file === res.path_file,
           );
 
           if (
@@ -1610,7 +1786,7 @@ router.put(
         transactionQueries.push(
           prisma.materi_resource.createMany({
             data: resourcesToCreate,
-          })
+          }),
         );
       }
 
@@ -1633,12 +1809,10 @@ router.put(
         error: error.message,
       });
     }
-  }
+  },
 );
 
-// =======================================================================
-// DELETE MATERI BY ID
-// =======================================================================
+// delete materi
 router.delete(
   "/delete-materi/:idMateri",
   authenticateUser,
@@ -1653,61 +1827,58 @@ router.delete(
     }
 
     try {
+      // 1. Dapatkan data mentor untuk cek tipe
       const mentorData = await prisma.mentor.findUnique({
         where: { id: idMentor },
-        select: { id_campus: true, mentor_type: true },
+        select: { mentor_type: true },
       });
 
-      if (!mentorData.mentor_type == "super_mentor") {
-        return res
-          .status(403)
-          .json({ message: "Anda tidak bisa menambahkan program!" });
+      if (!mentorData) {
+        return res.status(404).json({ message: "Mentor tidak ditemukan." });
       }
 
-      // 1. Cari Materi dan Verifikasi Kepemilikan
+      const isSuperMentor = mentorData.mentor_type === "super_mentor";
+
+      // 2. Cari Materi dengan Verifikasi Kepemilikan Dinamis
       const materi = await prisma.materi.findFirst({
-        where: { id: idMateriInt },
-        include: {
-          program: {
-            include: {
-              program_mentor: {
-                where: {
-                  id_mentor: idMentor,
+        where: {
+          id: idMateriInt,
+          // Logika Akses:
+          ...(isSuperMentor
+            ? {} // Super mentor bebas hapus materi mana saja
+            : {
+                program: {
+                  program_mentor: {
+                    some: { id_mentor: idMentor },
+                  },
                 },
-              },
-            },
-          },
+              }),
+        },
+        include: {
           materi_resource: true,
         },
       });
 
       if (!materi) {
-        return res.status(404).json({ message: "Materi tidak ditemukan." });
-      }
-
-      // Verifikasi apakah mentor terdaftar di program materi ini
-      const isMentorAssigned =
-        materi.program && materi.program.program_mentor.length > 0;
-
-      if (!isMentorAssigned) {
-        return res.status(403).json({
-          message: "Anda tidak memiliki akses untuk menghapus materi ini.",
+        return res.status(404).json({
+          message: isSuperMentor
+            ? "Materi tidak ditemukan."
+            : "Materi tidak ditemukan atau Anda tidak memiliki akses untuk menghapus materi ini.",
         });
       }
 
-      // 2. Hapus File Fisik (jika tidak digunakan oleh materi lain)
+      // 3. Hapus File Fisik (jika tipe 'file' dan tidak digunakan oleh materi lain)
       if (materi.materi_resource && materi.materi_resource.length > 0) {
         for (const resource of materi.materi_resource) {
           if (resource.type === "file" && resource.path_file) {
-            // Cek apakah file digunakan oleh materi lain (id_materi berbeda)
+            // Cek penggunaan file yang sama di resource materi lain
             const isUsedByOther = await prisma.materi_resource.findFirst({
               where: {
                 path_file: resource.path_file,
-                id_materi: { not: idMateriInt },
+                id_materi: { not: idMateriInt }, // Cari yang bukan milik materi ini
               },
             });
 
-            // Jika tidak digunakan oleh materi lain, hapus file fisiknya
             if (!isUsedByOther) {
               const filePath = path.join(process.cwd(), resource.path_file);
               if (fs.existsSync(filePath)) {
@@ -1722,7 +1893,9 @@ router.delete(
         }
       }
 
-      // 3. Hapus Materi dari Database
+      // 4. Hapus Materi dari Database
+      // Prisma akan otomatis menghapus materi_resource jika Anda sudah set ON DELETE CASCADE di skema
+      // Jika belum, hapus resource-nya dulu secara manual atau biarkan Prisma menghandelnya lewat transaction
       await prisma.materi.delete({
         where: { id: idMateriInt },
       });
@@ -1737,7 +1910,7 @@ router.delete(
         error: error.message,
       });
     }
-  }
+  },
 );
 
 // delete program by id for mentor
@@ -1827,7 +2000,7 @@ router.delete(
         error: error.message,
       });
     }
-  }
+  },
 );
 
 // get detail campus for mentor
@@ -1895,11 +2068,11 @@ router.get(
       const formattedData = { ...campusDetail };
       formattedData.logo_url = formatPathToUrl(
         formattedData.path_logo,
-        BASE_URL
+        BASE_URL,
       );
       formattedData.banner_url = formatPathToUrl(
         formattedData.path_banner,
-        BASE_URL
+        BASE_URL,
       );
       delete formattedData.path_logo;
       delete formattedData.path_banner;
@@ -1915,7 +2088,7 @@ router.get(
         error: error.message,
       });
     }
-  }
+  },
 );
 
 // edit image campus for mentor
@@ -2052,7 +2225,7 @@ router.put(
         error: error.message,
       });
     }
-  }
+  },
 );
 
 // edit description and vision mission campus for mentor
@@ -2062,10 +2235,14 @@ router.put(
   authorizeRoles(["mentor"]),
   async (req, res) => {
     const idMentor = req.user.id;
-    const { description, vision_mission } = req.body;
+    const { campus_website, description, vision_mission } = req.body;
 
     // Cek apakah ada data yang dikirim untuk diperbarui
-    if (description === undefined && vision_mission === undefined) {
+    if (
+      description === undefined &&
+      vision_mission === undefined &&
+      campus_website === undefined
+    ) {
       return res
         .status(400)
         .json({ message: "Tidak ada data yang dikirim untuk diperbarui." });
@@ -2092,6 +2269,10 @@ router.put(
 
       const idCampus = mentorData.id_campus;
       const dataToUpdate = {};
+
+      if (campus_website !== undefined) {
+        dataToUpdate.website_campus = campus_website;
+      }
 
       if (description !== undefined) {
         dataToUpdate.description = description;
@@ -2129,7 +2310,85 @@ router.put(
         error: error.message,
       });
     }
-  }
+  },
+);
+
+router.get(
+  "/get-balance",
+  authenticateUser,
+  authorizeRoles(["mentor"]),
+  async (req, res) => {
+    const idMentor = req.user.id;
+
+    // console.log(idMentor);
+
+    try {
+      const getCampus = await prisma.mentor.findUnique({
+        where: {
+          id: idMentor,
+        },
+      });
+
+      const [getBalance, getSubscriptionCampus] = await Promise.all([
+        prisma.campus_wallet.findUnique({
+          where: { id_campus: getCampus.id_campus },
+        }),
+        prisma.campus_subscription.findFirst({
+          where: { id_campus: getCampus.id_campus, status: "active" },
+        }),
+      ]);
+
+      if (!getBalance) {
+        return res.status(404).json({
+          statusCode: 404,
+          messages: "Dompet kampus tidak ditemukan. Silakan hubungi admin.",
+        });
+      }
+
+      if (!getSubscriptionCampus) {
+        return res.status(200).json({
+          statusCode: 200,
+          messages: "Kampus belum memiliki paket langganan aktif.",
+          data: {
+            balance: Number(getBalance.current_balance),
+            quota_mentee: 0,
+          },
+        });
+      }
+
+      // price per mentee
+      const menteePriceMap = {
+        1: 15000, // Paket Berkembang
+        2: 20000, // Paket Eksklusif
+      };
+
+      // const packageId = getSubscriptionPackage.id;
+      const pricePerMentee = 15000;
+
+      const totalQuota =
+        pricePerMentee > 0
+          ? Math.floor(Number(getBalance.current_balance) / pricePerMentee)
+          : 0;
+
+      const data = {
+        balance: Number(getBalance.current_balance),
+        quota_mentee: totalQuota,
+      };
+
+      return res.status(200).json({
+        statusCode: 200,
+        messages: "success",
+        data: data,
+      });
+    } catch (error) {
+      console.error(`[GetBalance Error] Campus ID ${idCampus}:`, error);
+
+      return res.status(500).json({
+        statusCode: 500,
+        messages: "Terjadi kesalahan internal pada server.",
+      });
+    }
+  },
 );
 
 // test midleware
@@ -2148,7 +2407,7 @@ router.post(
         message: error,
       });
     }
-  }
+  },
 );
 
 export default router;

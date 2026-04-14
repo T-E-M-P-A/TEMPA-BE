@@ -14,6 +14,8 @@ import formatPathToUrl from "../controllers/formatPathUrl.js"; // Helper untuk f
 import bcrypt from "bcrypt";
 import nodemailer from "nodemailer";
 import mailQueue from "../lib/mailQueue.js";
+import * as campusController from "../controllers/campusController.js";
+import generateCertificateQueue from "../lib/generateCertificate.js";
 
 const router = express.Router();
 
@@ -21,7 +23,7 @@ const CLIENT_ID = process.env.CLIENT_ID;
 const client = new OAuth2Client(CLIENT_ID);
 
 const JWT_SECRET = process.env.JWT_SECRET;
-const BASE_URL = process.env.API_BASE_URL; // Pastikan ini diatur di .env
+const BASE_URL = process.env.API_BASE_URL;
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -42,7 +44,7 @@ const PYTHON_VENV_PATH = path.join(
   PROJECT_ROOT,
   "venv_pddikti",
   "bin",
-  "python3"
+  "python3",
 );
 
 // Path Script Python
@@ -50,7 +52,7 @@ const PYTHON_SCRIPT_PATH = path.join(
   PROJECT_ROOT,
   "src",
   "controllers",
-  "dataCampus.py"
+  "dataCampus.py",
 );
 
 // Path Script Python untuk Mentor
@@ -58,7 +60,7 @@ const PYTHON_MENTOR_SCRIPT_PATH = path.join(
   PROJECT_ROOT,
   "src",
   "controllers",
-  "dataMentor.py"
+  "dataMentor.py",
 );
 // =======================================================================
 // MULTER CONFIG FOR PROGRAM IMAGE
@@ -84,7 +86,7 @@ const uploadProgramImage = multer({
   fileFilter: (req, file, cb) => {
     const fileTypes = /jpeg|jpg|png|gif/;
     const extname = fileTypes.test(
-      path.extname(file.originalname).toLowerCase()
+      path.extname(file.originalname).toLowerCase(),
     );
     const mimetype = fileTypes.test(file.mimetype);
     if (mimetype && extname) {
@@ -140,988 +142,75 @@ const normalizeResourcePath = (inputPath) => {
   return `program_materi/${parts[1]}`;
 };
 
-// =======================================================================
-// 1. OAUTH LOGIN CAMPUS
-// =======================================================================
-router.post("/login-campus", async (req, res) => {
-  const token = req.body.credential;
+// oauth login
+router.post("/login-campus", campusController.loginCampus);
 
-  if (!token) {
-    return res.status(400).json({ error: "No credential token provided." });
-  }
-
-  try {
-    const ticket = await client.verifyIdToken({
-      idToken: token,
-      audience: CLIENT_ID,
-    });
-
-    const payload = ticket.getPayload();
-
-    if (!payload) {
-      throw new Error("Invalid token payload.");
-    }
-
-    const { name, sub, email, email_verified } = payload;
-
-    if (!email_verified) {
-      return res
-        .status(401)
-        .json({ error: "Email Google belum diverifikasi." });
-    }
-
-    // get id user or add user
-    const userRecord = await findOrCreateCampus(payload);
-
-    // get user ID
-    const localUserId = userRecord.id;
-
-    const verifData = await prisma.campus.findFirst({
-      where: {
-        id: localUserId,
-      },
-      select: {
-        verification_status: true,
-        campus_name: true,
-      },
-    });
-
-    console.log(verifData);
-
-    const jwtPayload = {
-      id: localUserId, // id user
-      username: name,
-      email: email,
-      role: "campus",
-      verif: verifData,
-    };
-
-    // Buat token JWT
-    const signedJwtToken = jwt.sign(
-      jwtPayload,
-      JWT_SECRET,
-      { expiresIn: "1d" } // expired in 1 day
-    );
-
-    res.status(200).json({
-      message: "Login successful!",
-      data: {
-        token: signedJwtToken,
-        fullName: name,
-        uniqueId: localUserId,
-        email: email,
-      },
-    });
-  } catch (error) {
-    console.error("Token verification failed:", error.message);
-
-    if (error.message.includes("Wrong recipient")) {
-      const decoded = jwt.decode(token);
-      console.error(`[DEBUG] Backend CLIENT_ID: ${CLIENT_ID}`);
-      console.error(`[DEBUG] Token Audience (aud): ${decoded?.aud}`);
-    }
-
-    res.status(401).json({ error: "Authentication failed. Invalid token." });
-  }
-});
-
-// =======================================================================
-// 2. REGISTER MITRA CAMPUS (Update Data)
-// =======================================================================
+// register mitra campus (update data)
 router.post(
   "/register-mitra-campus",
   authenticateUser,
   authorizeRoles(["campus"]),
-  async (req, res) => {
-    const {
-      campusName,
-      emailCampus,
-      description,
-      websiteCampus,
-      province,
-      city,
-      subdistrict,
-      ward,
-      lat,
-      lng,
-      isCampusVerifiedByApi,
-    } = req.body;
-    const idCampus = req.user.id;
-
-    const requiredFields = [
-      "campusName",
-      "emailCampus",
-      "description",
-      "websiteCampus",
-      "province",
-      "city",
-      "subdistrict",
-      "ward",
-      "lat",
-      "lng",
-    ];
-
-    // check if req is null
-    for (const field of requiredFields) {
-      const value = req.body[field];
-
-      if (
-        value === undefined ||
-        value === null ||
-        (typeof value === "string" && value.trim() === "")
-      ) {
-        return res.status(400).json({
-          // 400 Bad Request
-          message: `Gagal: Kolom '${field}' wajib diisi dan tidak boleh kosong.`,
-        });
-      }
-    }
-
-    // check format email
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(emailCampus)) {
-      return res.status(400).json({
-        message: "Gagal: Format email tidak valid.",
-      });
-    }
-
-    try {
-      // convertion to float
-      const parsedLat = parseFloat(lat);
-      const parsedLng = parseFloat(lng);
-
-      // check if lat and lng value is float
-      if (isNaN(parsedLat) || isNaN(parsedLng)) {
-        return res.status(400).json({
-          message:
-            "Gagal: Latitude (lat) dan Longitude (lng) harus berupa angka yang valid.",
-        });
-      }
-
-      let checkValidationApi = null;
-
-      if (isCampusVerifiedByApi) {
-        checkValidationApi = "accepted";
-      } else {
-        checkValidationApi = "pending";
-      }
-
-      // Update data detail kampus
-      const saveDataCampus = await prisma.campus.update({
-        where: {
-          id: idCampus,
-        },
-        data: {
-          campus_name: campusName,
-          email_campus: emailCampus,
-          description: description,
-          website_campus: websiteCampus,
-          province: province,
-          city: city,
-          subdistrict: subdistrict,
-          ward: ward,
-          lat: parsedLat,
-          lng: parsedLng,
-        },
-      });
-
-      // Update status verifikasi
-      const changeVerificationStatus = await prisma.campus.update({
-        where: {
-          id: idCampus,
-        },
-        data: {
-          verification_status: checkValidationApi,
-        },
-      });
-
-      return res.status(200).json({
-        message: "Campus Berhasil Register",
-        data: saveDataCampus,
-      });
-    } catch (error) {
-      console.error("Prisma Error:", error);
-
-      // error unique email
-      if (error.code === "P2002") {
-        return res.status(409).json({
-          message: "Email kampus sudah terdaftar (pelanggaran unik).",
-        });
-      }
-      // error validation input
-      if (error.name === "PrismaClientValidationError") {
-        return res.status(400).json({
-          message:
-            "Kesalahan validasi input data. Cek fields yang wajib diisi.",
-          details: error.message,
-        });
-      }
-
-      return res.status(500).json({
-        message: "Terjadi kesalahan server saat menyimpan data.",
-        error: error.message,
-      });
-    }
-  }
+  campusController.registerCampus,
 );
 
-// =======================================================================
-// 2.1. EDIT DATA CAMPUS
-// =======================================================================
+// edit data campus
 router.put(
   "/edit-data-campus",
   authenticateUser,
   authorizeRoles(["campus"]),
-  async (req, res) => {
-    const {
-      campusName,
-      emailCampus,
-      description,
-      websiteCampus,
-      province,
-      city,
-      subdistrict,
-      ward,
-      lat,
-      lng,
-    } = req.body;
-    const idCampus = req.user.id;
-
-    const requiredFields = [
-      "campusName",
-      "emailCampus",
-      "description",
-      "websiteCampus",
-      "province",
-      "city",
-      "subdistrict",
-      "ward",
-      "lat",
-      "lng",
-    ];
-
-    // check if req is null
-    for (const field of requiredFields) {
-      const value = req.body[field];
-
-      if (
-        value === undefined ||
-        value === null ||
-        (typeof value === "string" && value.trim() === "")
-      ) {
-        return res.status(400).json({
-          message: `Gagal: Kolom '${field}' wajib diisi dan tidak boleh kosong.`,
-        });
-      }
-    }
-
-    // check format email
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(emailCampus)) {
-      return res.status(400).json({
-        message: "Gagal: Format email tidak valid.",
-      });
-    }
-
-    try {
-      // convertion to float
-      const parsedLat = parseFloat(lat);
-      const parsedLng = parseFloat(lng);
-
-      // check if lat and lng value is float
-      if (isNaN(parsedLat) || isNaN(parsedLng)) {
-        return res.status(400).json({
-          message:
-            "Gagal: Latitude (lat) dan Longitude (lng) harus berupa angka yang valid.",
-        });
-      }
-
-      // Update data detail kampus
-      const updateDataCampus = await prisma.campus.update({
-        where: {
-          id: idCampus,
-        },
-        data: {
-          campus_name: campusName,
-          email_campus: emailCampus,
-          description: description,
-          website_campus: websiteCampus,
-          province: province,
-          city: city,
-          subdistrict: subdistrict,
-          ward: ward,
-          lat: parsedLat,
-          lng: parsedLng,
-          verification_status: "pending",
-        },
-      });
-
-      return res.status(200).json({
-        message: "Data kampus berhasil diperbarui",
-        data: updateDataCampus,
-      });
-    } catch (error) {
-      console.error("Prisma Error:", error);
-
-      // error unique email
-      if (error.code === "P2002") {
-        return res.status(409).json({
-          message: "Email kampus sudah terdaftar (pelanggaran unik).",
-        });
-      }
-      // error validation input
-      if (error.name === "PrismaClientValidationError") {
-        return res.status(400).json({
-          message:
-            "Kesalahan validasi input data. Cek fields yang wajib diisi.",
-          details: error.message,
-        });
-      }
-
-      return res.status(500).json({
-        message: "Terjadi kesalahan server saat memperbarui data.",
-        error: error.message,
-      });
-    }
-  }
+  campusController.editDataCampus,
 );
 
-// =======================================================================
-// 3. CHECK VERIFICATION STATUS CAMPUS
-// =======================================================================
+// check verification campus
 router.get(
   "/check-verification-status",
   authenticateUser,
   authorizeRoles(["campus"]),
-  async (req, res) => {
-    const idCampus = req.user.id;
-
-    try {
-      const getVerification = await prisma.campus.findFirst({
-        where: {
-          id: idCampus,
-        },
-        select: {
-          verification_status: true,
-        },
-      });
-
-      console.log(getVerification);
-
-      if (!getVerification) {
-        return res.status(404).json({
-          message: "Data kampus tidak ditemukan.",
-        });
-      }
-
-      return res.status(200).json({
-        message: "Data berhasil didapatkan",
-        data: getVerification,
-      });
-    } catch (error) {
-      console.error("Error fetching verification status:", error);
-      return res.status(500).json({
-        message: "Terjadi kesalahan server.",
-        error: error.message,
-      });
-    }
-  }
+  campusController.checkVerificationCampus,
 );
 
-// =======================================================================
-// 3.1. GET DETAIL VERIFICATION CAMPUS (For Edit Form)
-// =======================================================================
+// get detail verification campus (For Edit Form)
 router.get(
   "/get-detail-verification-campus",
   authenticateUser,
   authorizeRoles(["campus"]),
-  async (req, res) => {
-    const idCampus = req.user.id;
-
-    try {
-      const campus = await prisma.campus.findUnique({
-        where: {
-          id: idCampus,
-        },
-        select: {
-          id: true,
-          campus_name: true,
-          email_campus: true,
-          description: true,
-          website_campus: true,
-          province: true,
-          city: true,
-          subdistrict: true,
-          ward: true,
-          lat: true,
-          lng: true,
-        },
-      });
-
-      if (!campus) {
-        return res.status(404).json({
-          message: "Data kampus tidak ditemukan.",
-        });
-      }
-
-      return res.status(200).json({
-        message: "Detail kampus berhasil diambil",
-        data: campus,
-      });
-    } catch (error) {
-      console.error("Gagal mengambil detail kampus:", error);
-      return res.status(500).json({
-        message: "Terjadi kesalahan server saat mengambil detail kampus",
-        error: error.message,
-      });
-    }
-  }
+  campusController.getDetailVerificationCampus,
 );
 
-// =======================================================================
-// 4. GET ALL PROGRAMS BY CAMPUS ID
-// =======================================================================
+// get all program by campus id
 router.get(
   "/get-program-campus",
   authenticateUser,
   authorizeRoles(["campus"]),
-  async (req, res) => {
-    const idCampus = req.user.id;
-
-    try {
-      const getProgram = await prisma.program.findMany({
-        where: {
-          id_campus: idCampus,
-        },
-        include: {
-          campus_program_id_majorTocampus: {
-            include: {
-              standard_major: {
-                select: {
-                  major_name: true,
-                },
-              },
-            },
-          },
-          sesi_program: {
-            select: {
-              type_sesi: true,
-              sesi_date: true,
-            },
-          },
-        },
-        orderBy: {
-          create_at: "desc",
-        },
-      });
-
-      const formattedPrograms = getProgram.map((item) => {
-        const imageUrl = formatPathToUrl(item.path_gambar, BASE_URL);
-
-        const majorName =
-          item.campus_program_id_majorTocampus?.standard_major?.major_name ||
-          null;
-
-        const newItem = {
-          id: item.id,
-          program_name: item.program_name,
-          description: item.description,
-          start_date: item.start_regis_date,
-          end_date: item.end_regis_date,
-          capacity: item.capacity,
-          program_status: item.program_status,
-          onsiteLocationName: item.onsiteLocationName,
-          major_name: majorName,
-          image_url: imageUrl,
-          sesi_program: item.type_sesi,
-          visibility: item.visibility,
-        };
-
-        return newItem;
-      });
-
-      console.log(formattedPrograms);
-
-      if (formattedPrograms.length === 0) {
-        return res.status(200).json({
-          message: "Kampus belum memiliki program yang terdaftar.",
-          data: [],
-        });
-      }
-
-      return res.status(200).json({
-        message: "Data program kampus berhasil didapatkan.",
-        data: formattedPrograms,
-      });
-    } catch (error) {
-      console.error("Error fetching campus programs:", error);
-      return res.status(500).json({
-        message: "Terjadi kesalahan server saat mengambil data program.",
-        error: error.message,
-      });
-    }
-  }
+  campusController.getAllProgramByCampusId,
 );
 
-// =======================================================================
-// 5. GET DETAIL PROGRAM BY ID
-// =======================================================================
+// get detail program by id program
 router.get(
   "/get-detail-program/:id",
   authenticateUser,
   authorizeRoles(["campus"]),
-  async (req, res) => {
-    const idCampus = req.user.id;
-    const idProgram = req.params.id;
-    const parsedIdProgram = parseInt(idProgram);
-
-    // validation id program
-    if (isNaN(parsedIdProgram)) {
-      return res.status(400).json({
-        message: "ID Program tidak valid. Harus berupa angka.",
-      });
-    }
-
-    try {
-      const getCampusSubscription = await prisma.campus_subscription.findFirst({
-        where: {
-          id_campus: idCampus,
-          id_package: {
-            in: [1, 2],
-          },
-          expired_date: {
-            gte: new Date(),
-          },
-        },
-      });
-
-      const detailProgram = await prisma.program.findUnique({
-        where: {
-          id: parsedIdProgram,
-          id_campus: idCampus,
-        },
-        include: {
-          // get mentor where handle the program
-          program_mentor: {
-            where: {
-              id_program: parsedIdProgram,
-            },
-            include: {
-              mentor: {
-                select: {
-                  id: true,
-                  name: true,
-                  nik: true,
-                  mentor_type: true,
-                },
-              },
-            },
-          },
-          // get program major
-          campus_program_id_majorTocampus: {
-            include: {
-              standard_major: {
-                select: {
-                  id: true,
-                  major_name: true,
-                },
-              },
-            },
-          },
-          // get matery program
-          materi: {
-            select: {
-              id: true,
-              title: true,
-              description: true,
-              visibility: true,
-              // get resource matery
-              materi_resource: {
-                select: {
-                  type: true,
-                  path_file: true,
-                },
-              },
-            },
-          },
-          // get mentee where register program
-          mentee_progress: {
-            select: {
-              completion_status: true,
-              final_score: true,
-              create_at: true,
-              mentee: {
-                select: {
-                  id: true,
-                  username: true,
-                  email: true,
-                  gender: true,
-                },
-              },
-            },
-          },
-          // total mentee where register program
-          _count: {
-            select: {
-              mentee_progress: true,
-            },
-          },
-        },
-      });
-
-      if (!detailProgram) {
-        return res.status(404).json({
-          message: "Program tidak ditemukan atau bukan milik kampus ini.",
-        });
-      }
-
-      let formattedCityDistribution = [];
-      let formattedEducationStatus = [];
-
-      if (getCampusSubscription) {
-        // Ambil statistik distribusi kota mentee yang terdaftar di program ini
-        const cityDistribution = await prisma.mentee.groupBy({
-          by: ["city"],
-          where: {
-            mentee_progress: {
-              some: {
-                id_program: parsedIdProgram,
-              },
-            },
-            city: {
-              not: null,
-            },
-          },
-          _count: {
-            city: true,
-          },
-          orderBy: {
-            _count: {
-              city: "desc",
-            },
-          },
-        });
-
-        formattedCityDistribution = cityDistribution.map((item) => ({
-          city: item.city,
-          total: item._count.city,
-        }));
-
-        // Ambil statistik status pendidikan mentee yang terdaftar di program ini
-        const educationStatusDistribution = await prisma.mentee.groupBy({
-          by: ["education_status"],
-          where: {
-            mentee_progress: {
-              some: {
-                id_program: parsedIdProgram,
-              },
-            },
-          },
-          _count: {
-            education_status: true,
-          },
-        });
-
-        formattedEducationStatus = educationStatusDistribution.map((item) => ({
-          status: item.education_status,
-          total: item._count.education_status,
-        }));
-      }
-
-      const item = detailProgram;
-
-      // FORMAT PATH GAMBAR PROGRAM UTAMA
-      const imageUrl = formatPathToUrl(item.path_gambar, BASE_URL);
-      const formattedMateriList = item.materi.map((materi) => ({
-        ...materi,
-        // Lakukan mapping pada materi_resource
-        materi_resource: materi.materi_resource.map((resource) => {
-          const newItem = {
-            ...resource,
-            resource_url:
-              resource.type === "kuis" || resource.type === "video"
-                ? resource.path_file
-                : formatPathToUrl(resource.path_file, BASE_URL),
-          };
-          delete newItem.path_file;
-          return newItem;
-        }),
-      }));
-
-      // formattedDetail
-      const formattedDetail = {
-        ...item,
-        image_url: imageUrl,
-        seen: !getCampusSubscription ? false : detailProgram.seen,
-        major_name:
-          item.campus_program_id_majorTocampus?.standard_major?.major_name ||
-          null,
-        registered_mentees: item._count?.mentee_progress || 0,
-        // format data for mentee list
-        free_trial: getCampusSubscription ? true : false,
-        send_mail: getCampusSubscription?.id_package === 2 ? true : false,
-        mentee_list: item.mentee_progress.map((mp) => ({
-          id: mp.mentee?.id,
-          username: mp.mentee?.username,
-          email:
-            getCampusSubscription?.id_package === 2 ? mp.mentee?.email : null,
-          gender: mp.mentee?.gender,
-          completion_status: mp.completion_status,
-          final_score: mp.final_score,
-          create_at: mp.create_at,
-          city_distribution: formattedCityDistribution,
-          education_status_distribution: formattedEducationStatus,
-        })),
-        // format data for matery
-        materi_list: formattedMateriList,
-        mentor_list: item.program_mentor.map((pm) => ({
-          id: pm.id,
-          mentor_id: pm.mentor?.id,
-          name: pm.mentor?.name,
-          nik: pm.mentor?.nik,
-          mentor_type: pm.mentor?.mentor_type,
-        })),
-      };
-
-      // Bersihkan properti yang tidak diperlukan lagi (opsional)
-      delete formattedDetail.path_gambar;
-      delete formattedDetail.program_mentor;
-      delete formattedDetail.id_campus;
-      delete formattedDetail.id_mentor;
-      delete formattedDetail.id_session_type;
-      delete formattedDetail.campus_program_id_majorTocampus;
-      delete formattedDetail._count;
-      // Hapus mentee_progress mentah yang sudah dipetakan
-      delete formattedDetail.mentee_progress;
-      delete formattedDetail.materi; // Hapus materi mentah
-
-      // console.log(formattedDetail);
-
-      return res.status(200).json({
-        message: "Detail program berhasil ditemukan.",
-        data: formattedDetail,
-      });
-    } catch (error) {
-      console.error("Error fetching detail program:", error);
-      return res.status(500).json({
-        message: "Terjadi kesalahan server saat mengambil detail program.",
-        error: error.message,
-      });
-    }
-  }
+  campusController.getDetailProgram,
 );
 
-// =======================================================================
-// 6. GET ALL MENTEE WHERE REGISTERED PROGRAM BY ID
-// =======================================================================
+// get all mentee where registered program by id
 router.get(
   "/get-detail-program-total-mentee/:id",
   authenticateUser,
   authorizeRoles(["campus"]),
-  async (req, res) => {
-    const idCampus = req.user.id;
-    const idProgram = req.params.id;
-
-    try {
-      // ✅ GANTI DARI findMany MENJADI findFirst
-      const programData = await prisma.program.findFirst({
-        where: {
-          id: parseInt(idProgram),
-          id_campus: idCampus, // Verifikasi kepemilikan
-        },
-        select: {
-          mentee_progress: {
-            select: {
-              mentee: {
-                select: {
-                  username: true,
-                  email: true,
-                },
-              },
-            },
-          },
-          _count: {
-            select: {
-              mentee_progress: true,
-            },
-          },
-        },
-      });
-
-      if (!programData) {
-        return res.status(404).json({
-          message: "Program tidak ditemukan atau bukan milik kampus ini.",
-        });
-      }
-
-      const formattedData = {
-        total_mentee: programData._count.mentee_progress,
-        // Merapikan list mentee
-        mentees: programData.mentee_progress.map((mp) => ({
-          username: mp.mentee?.username,
-          email: mp.mentee?.email,
-        })),
-      };
-
-      console.log(formattedData);
-
-      return res.status(200).json({
-        message: "Data program beserta detail mentee berhasil diambil",
-        data: formattedData, // ✅ MENGEMBALIKAN OBJEK YANG SUDAH DIFORMAT
-      });
-    } catch (error) {
-      console.error("Error fetching detail program:", error);
-      // Handle error jika idProgram tidak valid (misalnya bukan integer)
-      if (error.message.includes("id must be of type integer")) {
-        return res.status(400).json({
-          message: "ID Program tidak valid.",
-          error: error.message,
-        });
-      }
-      return res.status(500).json({
-        message: "Terjadi kesalahan server saat mengambil detail program.",
-        error: error.message,
-      });
-    }
-  }
+  campusController.getAllMenteeWhereRegisteredProgram,
 );
 
-// =======================================================================
-// 6.1. GET PROGRAM FEEDBACK
-// =======================================================================
+// get program feedback
 router.get(
   "/get-program-feedback/:id",
   authenticateUser,
   authorizeRoles(["campus"]),
-  async (req, res) => {
-    const idCampus = req.user.id;
-    const idProgram = parseInt(req.params.id);
-
-    if (isNaN(idProgram)) {
-      return res.status(400).json({
-        message: "ID Program tidak valid. Harus berupa angka.",
-      });
-    }
-
-    try {
-      // Cek apakah program milik kampus
-      const program = await prisma.program.findFirst({
-        where: {
-          id: idProgram,
-          id_campus: idCampus,
-        },
-      });
-
-      if (!program) {
-        return res.status(404).json({
-          message: "Program tidak ditemukan atau bukan milik kampus ini.",
-        });
-      }
-
-      const feedbacks = await prisma.program_feedback.findMany({
-        where: {
-          id_program: idProgram,
-        },
-        include: {
-          mentee: {
-            select: {
-              username: true,
-              email: true,
-            },
-          },
-        },
-      });
-
-      const formattedFeedbacks = feedbacks.map((item) => ({
-        id: item.id,
-        rating: item.rating,
-        evaluation: item.evaluation,
-        username: item.mentee?.username || "Unknown",
-        email: item.mentee?.email,
-      }));
-
-      return res.status(200).json({
-        message: "Data feedback program berhasil diambil.",
-        data: formattedFeedbacks,
-      });
-    } catch (error) {
-      console.error("Error fetching program feedback:", error);
-      return res.status(500).json({
-        message: "Terjadi kesalahan server saat mengambil feedback.",
-        error: error.message,
-      });
-    }
-  }
+  campusController.getProgramFeedback,
 );
 
-// =======================================================================
-// 7. GET DATA CAMPUS FOR VALIDATION (Menggunakan Python)
-// =======================================================================
-router.get("/validate-campus/:campusName", (req, res) => {
-  const { campusName } = req.params;
-
-  if (!campusName) {
-    return res
-      .status(400)
-      .json({ status: "error", message: 'Parameter "campusName" diperlukan.' });
-  }
-
-  // Gunakan spawn untuk menjalankan proses Python
-  const pythonProcess = spawn(PYTHON_VENV_PATH, [
-    PYTHON_SCRIPT_PATH,
-    campusName, // Argumen untuk Python
-  ]);
-
-  let outputData = "";
-  let errorData = "";
-
-  // Tangkap output (stdout) dari skrip Python
-  pythonProcess.stdout.on("data", (data) => {
-    outputData += data.toString();
-  });
-
-  // Tangkap error (stderr) dari skrip Python
-  pythonProcess.stderr.on("data", (data) => {
-    errorData += data.toString();
-  });
-
-  // Tangani penutupan proses
-  pythonProcess.on("close", (code) => {
-    if (code !== 0) {
-      console.error(
-        `Python script exited with code ${code}. Stderr: ${errorData}`
-      );
-      // Coba parse outputData jika berisi error JSON dari Python
-      try {
-        const errorResult = JSON.parse(outputData);
-        if (errorResult.status === "error") {
-          return res.status(500).json(errorResult);
-        }
-      } catch (e) {
-        // Jika output bukan JSON error, kirim pesan error generik
-        return res.status(500).json({
-          status: "error",
-          message: "Gagal menjalankan validasi kampus (Internal Server Error).",
-        });
-      }
-    }
-
-    try {
-      // Parse output JSON dari Python
-      const result = JSON.parse(outputData);
-      console.log(result);
-
-      // Kirim hasil ke frontend
-      return res.json(result);
-    } catch (e) {
-      console.error("Failed to parse Python output:", outputData);
-      return res.status(500).json({
-        status: "error",
-        message: "Gagal memproses hasil dari Python.",
-      });
-    }
-  });
-});
+// get campus name for validation (use api from python)
+router.get("/validate-campus/:campusName", campusController.getNameCampus);
 
 // =======================================================================
 // 7.1. GET DATA MENTOR FOR VALIDATION (Menggunakan Python)
@@ -1158,7 +247,7 @@ router.get("/validate-mentor/:nik", (req, res) => {
   pythonProcess.on("close", (code) => {
     if (code !== 0) {
       console.error(
-        `Python script (mentor) exited with code ${code}. Stderr: ${errorData}`
+        `Python script (mentor) exited with code ${code}. Stderr: ${errorData}`,
       );
       try {
         const errorResult = JSON.parse(outputData);
@@ -1191,511 +280,122 @@ router.get(
   "/get-program-campus-chart",
   authenticateUser,
   authorizeRoles(["campus"]),
-  async (req, res) => {
-    const idCampus = req.user.id;
-    try {
-      const getProgramCampus = await prisma.program.findMany({
-        where: {
-          id_campus: idCampus,
-        },
-        select: {
-          id: true,
-          program_name: true,
-          _count: {
-            select: {
-              mentee_progress: true,
-            },
-          },
-        },
-      });
-
-      // get count total mentee
-      const programsWithMenteeCount = getProgramCampus.map((program) => ({
-        id: program.id,
-        program_name: program.program_name,
-        // Total mentee diambil dari hasil perhitungan _count
-        total_mentee: program._count.mentee_progress,
-      }));
-
-      console.log(programsWithMenteeCount);
-
-      return res.status(200).json({
-        message: "Data program beserta total mentee berhasil diambil",
-        data: programsWithMenteeCount,
-      });
-    } catch (error) {
-      console.error(error);
-      return res.status(500).json({
-        message: "Terjadi kesalahan saat mengambil data program",
-        error: error.message,
-      });
-    }
-  }
+  campusController.getProgramCampusDataChart,
 );
 
-// =======================================================================
-// CREATE NEW PROGRAM
-// =======================================================================
+// create program campus
 router.post(
   "/create-program",
   authenticateUser,
   authorizeRoles(["campus"]),
   uploadProgramImage.single("bannerImage"),
-  async (req, res) => {
-    const idCampus = req.user.id;
-
-    // Validasi file upload
-    if (!req.file) {
-      return res
-        .status(400)
-        .json({ message: "Gambar banner program wajib diunggah." });
-    }
-
-    const {
-      name,
-      majorName,
-      programType,
-      visibility,
-      startRegisDate,
-      endRegisDate,
-      startDateProgram,
-      endDateProgram,
-      startTime,
-      endTime,
-      capacity,
-      description,
-      benefits, // JSON string
-      terms, // JSON string
-      location_name,
-      mapLat,
-      mapLng,
-    } = req.body;
-
-    // console.log(req.body);
-
-    // Validasi field wajib
-    const requiredFields = {
-      name,
-      majorName,
-      programType,
-      visibility,
-      startRegisDate,
-      endRegisDate,
-      startDateProgram,
-      endDateProgram,
-      startTime,
-      endTime,
-      capacity,
-      description,
-      benefits,
-      terms,
-    };
-    for (const [field, value] of Object.entries(requiredFields)) {
-      if (!value) {
-        return res
-          .status(400)
-          .json({ message: `Field '${field}' wajib diisi.` });
-      }
-    }
-
-    try {
-      // 1. Konversi majorName (yang sebenarnya adalah majorId) ke integer
-      const majorId = parseInt(majorName, 10);
-      if (isNaN(majorId)) {
-        return res
-          .status(400)
-          .json({ message: "Format ID Jurusan tidak valid." });
-      }
-
-      // 2. Cari Major berdasarkan ID-nya dan pastikan milik kampus yang login
-      const major = await prisma.major.findFirst({
-        where: {
-          id_standard_major: majorId,
-          id_campus: parseInt(idCampus),
-        },
-        select: {
-          id: true,
-        },
-      });
-      if (!major) {
-        return res.status(404).json({
-          message: `Jurusan dengan ID '${majorId}' tidak ditemukan atau bukan milik kampus Anda.`,
-        });
-      }
-
-      // 2. Konversi tipe data
-
-      // Fungsi helper untuk mem-parsing benefits dan terms dengan aman
-      const parseJsonOrWrapInArray = (value) => {
-        if (typeof value === "string") {
-          try {
-            // Coba parse sebagai JSON, jika frontend mengirim format array string
-            return JSON.parse(value);
-          } catch (e) {
-            // Jika gagal, anggap itu adalah string yang dipisahkan koma.
-            // Pecah string berdasarkan koma, hapus spasi ekstra, dan filter item kosong.
-            return value
-              .split(",")
-              .map((item) => item.trim()) // Hapus spasi di awal/akhir
-              .filter((item) => item); // Hapus item kosong
-          }
-        }
-        return []; // Kembalikan array kosong jika tipe tidak dikenali
-      };
-
-      const parsedCapacity = parseInt(capacity, 10);
-      if (isNaN(parsedCapacity)) {
-        return res
-          .status(400)
-          .json({ message: "Kapasitas harus berupa angka." });
-      }
-      let parsedLat = null;
-      let parsedLng = null;
-
-      // 3. Siapkan data untuk disimpan
-      const programData = {
-        program_name: name,
-        description: description,
-        start_program_date: new Date(startDateProgram),
-        end_program_date: new Date(endDateProgram),
-        start_regis_date: new Date(startRegisDate),
-        end_regis_date: new Date(endRegisDate),
-        capacity: parsedCapacity,
-        // program_status: "open", // Default status saat dibuat
-        id_campus: parseInt(idCampus),
-        id_major: major.id,
-        path_gambar: req.file.path.replace(/\\/g, "/"), // Simpan path dan normalisasi slash
-        benefit: parseJsonOrWrapInArray(benefits),
-        terms_and_conditions: parseJsonOrWrapInArray(terms),
-        type_sesi: programType,
-        sesi_start: new Date(`1970-01-01T${startTime}:00`), // Simpan hanya waktu
-        sesi_end: new Date(`1970-01-01T${endTime}:00`),
-        visibility: visibility,
-        create_at: new Date(),
-        update_at: new Date(),
-      };
-
-      // Tambahkan data lokasi jika program 'onsite'
-      if (programType === "onsite") {
-        // Lakukan parsing dan validasi di dalam blok ini
-        parsedLat = parseFloat(mapLat);
-        parsedLng = parseFloat(mapLng);
-
-        // Validasi bahwa semua field lokasi ada dan valid untuk program onsite
-        if (!location_name || isNaN(parsedLat) || isNaN(parsedLng)) {
-          return res.status(400).json({
-            message:
-              "Untuk program onsite, nama lokasi, latitude, dan longitude wajib diisi dengan benar.",
-          });
-        }
-
-        // Tambahkan semua data lokasi ke programData
-        programData.onsiteLocationName = location_name;
-        programData.lat = parsedLat;
-        programData.lng = parsedLng;
-      }
-
-      // 4. Buat program baru di database
-      const newProgram = await prisma.program.create({
-        data: programData,
-      });
-
-      return res.status(201).json({
-        message: "Program berhasil dibuat.",
-        data: newProgram,
-      });
-    } catch (error) {
-      {
-        // Hapus file yang sudah diupload jika terjadi error
-        if (req.file) {
-          fs.unlink(req.file.path, (err) => {
-            if (err) console.error("Gagal menghapus file setelah error:", err);
-          });
-        }
-
-        console.error("Gagal membuat program:", error);
-        if (error instanceof SyntaxError) {
-          return res.status(400).json({
-            message: "Format JSON pada 'benefits' atau 'terms' tidak valid.",
-          });
-        }
-        return res.status(500).json({
-          message: "Terjadi kesalahan server saat membuat program.",
-          error: error.message,
-        });
-      }
-    }
-  }
+  campusController.createProgram,
 );
 
-// =======================================================================
-// 9. EDIT PROGRAM BY ID
-// =======================================================================
+// edit program
 router.put(
   "/edit-program/:id",
   authenticateUser,
   authorizeRoles(["campus"]),
-  uploadProgramImage.single("bannerImage"), // Middleware untuk handle upload gambar
-  async (req, res) => {
-    const idCampus = req.user.id;
-    const { id } = req.params;
-    const idProgram = parseInt(id, 10);
-
-    if (isNaN(idProgram)) {
-      return res
-        .status(400)
-        .json({ message: "ID Program tidak valid. Harus berupa angka." });
-    }
-
-    const {
-      name,
-      majorName, // Ini adalah ID jurusan
-      programType,
-      visibility,
-      startRegisDate,
-      endRegisDate,
-      startDateProgram,
-      endDateProgram,
-      startTime,
-      endTime,
-      capacity,
-      description,
-      benefits,
-      terms,
-      onsiteLocationName,
-      mapLat,
-      mapLng,
-    } = req.body;
-    // console.log(req.body);
-    try {
-      // 1. Cari program yang akan di-edit untuk verifikasi dan mendapatkan path gambar lama
-      const existingProgram = await prisma.program.findFirst({
-        where: {
-          id: idProgram,
-          id_campus: idCampus, // Pastikan program milik kampus yang sedang login
-        },
-      });
-
-      if (!existingProgram) {
-        return res.status(404).json({
-          message:
-            "Program tidak ditemukan atau Anda tidak berhak mengeditnya.",
-        });
-      }
-
-      // 2. Validasi Major ID baru (jika diubah)
-      const majorId = parseInt(majorName, 10);
-      if (isNaN(majorId)) {
-        return res
-          .status(400)
-          .json({ message: "Format ID Jurusan tidak valid." });
-      }
-
-      const major = await prisma.major.findFirst({
-        where: {
-          id_campus: parseInt(idCampus),
-          OR: [{ id: majorId }, { id_standard_major: majorId }],
-        },
-      });
-
-      console.log(`id jurusan: ${majorId}, id campus: ${idCampus}`);
-      console.log(major);
-
-      if (!major) {
-        return res.status(404).json({
-          message: `Jurusan dengan ID '${majorId}' tidak ditemukan atau bukan milik kampus Anda.`,
-        });
-      }
-
-      // Helper untuk menangani field yang bisa berupa string atau array dari FormData
-      const processMultiPartArray = (field) => {
-        if (!field) return [];
-        if (Array.isArray(field)) return field.map((item) => item.trim());
-        return [field.trim()];
-      };
-
-      // 3. Siapkan data yang akan di-update
-      const dataToUpdate = {
-        program_name: name,
-        id_major: majorId,
-        type_sesi: programType,
-        visibility: visibility,
-        start_regis_date: new Date(startRegisDate),
-        end_regis_date: new Date(endRegisDate),
-        start_program_date: new Date(startDateProgram),
-        end_program_date: new Date(endDateProgram),
-        sesi_start: new Date(`1970-01-01T${startTime}:00`),
-        sesi_end: new Date(`1970-01-01T${endTime}:00`),
-        capacity: parseInt(capacity, 10),
-        description: description,
-        benefit: processMultiPartArray(benefits),
-        terms_and_conditions: processMultiPartArray(terms),
-        update_at: new Date(),
-      };
-
-      // 4. Handle upload gambar baru (jika ada)
-      if (req.file) {
-        // Hapus gambar lama jika ada
-        if (existingProgram.path_gambar) {
-          const oldImagePath = path.join(
-            process.cwd(),
-            existingProgram.path_gambar
-          );
-          if (fs.existsSync(oldImagePath)) {
-            fs.unlink(oldImagePath, (err) => {
-              if (err)
-                console.error(
-                  "Gagal menghapus gambar lama:",
-                  oldImagePath,
-                  err
-                );
-              else console.log("Gambar lama berhasil dihapus:", oldImagePath);
-            });
-          }
-        }
-        // Tambahkan path gambar baru ke data yang akan di-update
-        dataToUpdate.path_gambar = req.file.path.replace(/\\/g, "/");
-      }
-
-      // 5. Handle data kondisional untuk program 'onsite'
-      if (programType === "onsite") {
-        const parsedLat = parseFloat(mapLat);
-        const parsedLng = parseFloat(mapLng);
-
-        if (!onsiteLocationName || isNaN(parsedLat) || isNaN(parsedLng)) {
-          return res.status(400).json({
-            message:
-              "Untuk program onsite, nama lokasi, latitude, dan longitude wajib diisi.",
-          });
-        }
-        dataToUpdate.onsiteLocationName = onsiteLocationName;
-        dataToUpdate.lat = parsedLat;
-        dataToUpdate.lng = parsedLng;
-      } else {
-        // Jika tipe program diubah dari onsite ke online, hapus data lokasi
-        dataToUpdate.onsiteLocationName = null;
-        dataToUpdate.lat = null;
-        dataToUpdate.lng = null;
-      }
-
-      // 6. Lakukan update di database
-      const updatedProgram = await prisma.program.update({
-        where: { id: idProgram },
-        data: dataToUpdate,
-      });
-
-      return res.status(200).json({
-        message: "Program berhasil diperbarui.",
-        data: updatedProgram,
-      });
-    } catch (error) {
-      // Jika terjadi error setelah file diunggah, hapus file tersebut
-      if (req.file) {
-        fs.unlink(req.file.path, (err) => {
-          if (err)
-            console.error(
-              "Gagal menghapus file yang baru diunggah setelah error:",
-              err
-            );
-        });
-      }
-
-      console.error("Gagal mengedit program:", error);
-      if (error.code === "P2025") {
-        return res.status(404).json({ message: "Program tidak ditemukan." });
-      }
-      return res.status(500).json({
-        message: "Terjadi kesalahan server saat mengedit program.",
-        error: error.message,
-      });
-    }
-  }
+  uploadProgramImage.single("bannerImage"),
+  campusController.updateProgram,
 );
 
-// =======================================================================
-// 8. DELETE PROGRAM BY ID
-// =======================================================================
+// delete program
 router.delete(
   "/delete-program/:id",
   authenticateUser,
   authorizeRoles(["campus"]),
+  campusController.deleteProgram,
+);
+
+router.get(
+  "/get-presensi-mentee/:id",
+  authenticateUser,
+  authorizeRoles(["campus"]),
+  campusController.getPresensiMentee,
+);
+
+// update expired presensi
+router.put(
+  "/update-expired-presensi/:idProgram",
+  authenticateUser,
+  authorizeRoles(["campus"]),
+  campusController.updateExpiredPresensi,
+);
+
+// generate certificate
+router.post(
+  "/generate-certificate",
+  authenticateUser,
+  authorizeRoles(["campus"]),
   async (req, res) => {
     const idCampus = req.user.id;
-    const { id } = req.params;
-    const idProgram = parseInt(id);
+    const { menteeId, idProgram } = req.body;
 
-    console.log(`ID Program: ${idProgram}, ID Campus: ${idCampus}`);
+    // console.log(menteeId);
 
-    // Validasi ID program
-    if (isNaN(idProgram)) {
-      return res.status(400).json({
-        message: "ID Program tidak valid. Harus berupa angka.",
+    const menteesWithFeedback = await prisma.mentee.findMany({
+      where: {
+        id: {
+          in: menteeId,
+        },
+        // Sesuaikan nama relasi di schema.prisma Anda (contoh: program_feedbacks)
+        program_feedback: {
+          some: {
+            id_program: idProgram,
+          },
+        },
+      },
+      select: {
+        username: true,
+        email: true,
+      },
+    });
+
+    if (menteesWithFeedback.length === 0) {
+      return res.status(400).send({
+        status: "error",
+        message:
+          "Tidak ada mentee yang bisa diproses karena belum mengisi feedback.",
       });
     }
 
-    try {
-      // 1. Cari program untuk verifikasi kepemilikan dan mendapatkan path gambar
-      const programToDelete = await prisma.program.findFirst({
-        where: {
-          id: idProgram,
-          id_campus: idCampus, // Pastikan program milik kampus yang login
-        },
-        select: {
-          path_gambar: true,
-        },
-      });
+    const campus = await prisma.campus.findUnique({
+      where: { id: idCampus },
+      select: { campus_name: true },
+    });
 
-      // Jika program tidak ditemukan atau bukan milik kampus ini
-      if (!programToDelete) {
-        return res.status(404).json({
-          message:
-            "Program tidak ditemukan atau Anda tidak berhak menghapusnya.",
-        });
-      }
+    const getProgram = await prisma.program.findUnique({
+      where: {
+        id: idProgram,
+      },
+      select: {
+        start_program_date: true,
+        end_program_date: true,
+      },
+    });
+    const campusName = campus?.campus_name || "Campus Team";
 
-      // 2. Hapus file gambar jika ada
-      if (programToDelete.path_gambar) {
-        // process.cwd() akan mengarah ke root proyek: /home/apipi/Pbl Sem-5/TEMPA-BE
-        const imagePath = path.join(process.cwd(), programToDelete.path_gambar);
+    menteesWithFeedback.forEach((mentee) => {
+      generateCertificateQueue
+        .push({
+          ...mentee,
+          campusName: campusName,
+          idProgram: idProgram,
+          startProgramDate: getProgram?.start_program_date,
+          endProgramDate: getProgram?.end_program_date,
+        })
+        .catch((err) =>
+          console.error(`Gagal masuk antrean untuk ${mentee.username}:`, err),
+        );
+    });
 
-        // Cek apakah file ada sebelum mencoba menghapus
-        if (fs.existsSync(imagePath)) {
-          fs.unlink(imagePath, (err) => {
-            if (err) {
-              // Log error jika gagal menghapus file, tapi lanjutkan proses
-              console.error(`Gagal menghapus file gambar: ${imagePath}`, err);
-            } else {
-              console.log(`File gambar berhasil dihapus: ${imagePath}`);
-            }
-          });
-        }
-      }
-
-      // 3. Hapus relasi program_mentor terlebih dahulu (karena constraint NoAction)
-      await prisma.program_mentor.deleteMany({
-        where: {
-          id_program: idProgram,
-        },
-      });
-
-      // 4. Hapus program dari database
-      await prisma.program.delete({
-        where: {
-          id: idProgram,
-        },
-      });
-
-      return res.status(200).json({
-        message: `Program dengan ID ${idProgram} berhasil dihapus.`,
-      });
-    } catch (error) {
-      console.error("Gagal menghapus program:", error);
-      return res.status(500).json({
-        message: "Terjadi kesalahan server saat menghapus program.",
-        error: error.message,
-      });
-    }
-  }
+    res.send({
+      status: "success",
+      message: `${menteesWithFeedback.length} dari ${menteeId.length} sertifikat berhasil diproses. Sisanya belum mengisi feedback.`,
+    });
+  },
 );
 
 // get major for form major
@@ -1730,7 +430,7 @@ router.get(
         .status(500)
         .json({ message: "Not Found due to internal error." });
     }
-  }
+  },
 );
 
 // get major campus
@@ -1767,7 +467,7 @@ router.get(
         .status(500)
         .json({ message: "Not Found due to internal error." });
     }
-  }
+  },
 );
 
 // =======================================================================
@@ -1788,7 +488,7 @@ router.get(
         select: {
           id: true,
           name: true,
-          nik: true,
+          email: true,
           mentor_type: true,
         },
       });
@@ -1807,11 +507,11 @@ router.get(
         .status(500)
         .json({ message: "Terjadi kesalahan internal pada server." });
     }
-  }
+  },
 );
 
 // =======================================================================
-// CREATE NEW MENTOR BY CAMPUS
+// CREATE NEW MENTOR BY CAMPUS (AUTO-GENERATE EMAIL)
 // =======================================================================
 router.post(
   "/create-mentor",
@@ -1819,37 +519,52 @@ router.post(
   authorizeRoles(["campus"]),
   async (req, res) => {
     const idCampus = req.user.id;
-    const { name, nik, password, mentor_type } = req.body;
+    const { name, password, mentor_type } = req.body;
 
-    // 1. Validasi input dasar
-    if (!name || !nik || !password || !mentor_type) {
+    // 1. Validasi input dasar (Tanpa NIK)
+    if (!name || !password || !mentor_type) {
       return res.status(400).json({
         message:
-          "Gagal: Field 'name', 'nik', 'password', dan 'mentor_type' wajib diisi.",
-      });
-    }
-
-    const parsedNik = parseInt(nik, 10);
-
-    if (isNaN(parsedNik)) {
-      return res.status(400).json({
-        message: "Gagal: 'nik' dan 'id_major' harus berupa angka yang valid.",
+          "Gagal: Field 'name', 'password', dan 'mentor_type' wajib diisi.",
       });
     }
 
     try {
-      // 3. Enkripsi password
+      // 2. Ambil data kampus untuk mendapatkan campus_name
+      const campusData = await prisma.campus.findUnique({
+        where: { id: idCampus },
+        select: { campus_name: true },
+      });
+
+      if (!campusData || !campusData.campus_name) {
+        return res.status(404).json({
+          message:
+            "Gagal: Data kampus tidak ditemukan atau nama kampus belum diatur.",
+        });
+      }
+
+      // 3. Generate Email: "namaMentor@namaKampus.com"
+      // Menghapus spasi dan mengubah ke lowercase
+      const cleanMentorName = name.replace(/\s+/g, "").toLowerCase();
+      const cleanCampusName = campusData.campus_name
+        .replace(/\s+/g, "")
+        .toLowerCase();
+      const generatedEmail = `${cleanMentorName}@${cleanCampusName}.com`;
+
+      // 4. Enkripsi password
       const saltRounds = 10;
       const hashedPassword = await bcrypt.hash(password, saltRounds);
 
-      // 4. Buat mentor baru di database
+      // 5. Buat mentor baru di database
+      // Pastikan model Mentor Anda memiliki field 'email'
       const newMentor = await prisma.mentor.create({
         data: {
           name: name,
-          nik: parsedNik,
+          email: generatedEmail, // Menggunakan email hasil generate
           id_campus: idCampus,
           password: hashedPassword,
           mentor_type: mentor_type,
+          // nik: null, // Jika di DB nik boleh null, jika tidak, isi dengan dummy/random
         },
       });
 
@@ -1858,15 +573,18 @@ router.post(
 
       return res.status(201).json({
         message: "Mentor baru berhasil dibuat.",
-        data: newMentor,
+        data: {
+          ...newMentor,
+          generated_email: generatedEmail, // Memberi tahu user email yang baru dibuat
+        },
       });
     } catch (error) {
       console.error("Gagal membuat mentor:", error);
 
-      // Penanganan error jika NIK sudah ada (unique constraint)
-      if (error.code === "P2002" && error.meta?.target?.includes("nik")) {
+      // Penanganan error jika Email sudah ada (unique constraint)
+      if (error.code === "P2002" && error.meta?.target?.includes("email")) {
         return res.status(409).json({
-          message: `Gagal: NIK '${nik}' sudah terdaftar.`,
+          message: `Gagal: Email mentor '${name}' sudah terdaftar untuk kampus ini.`,
         });
       }
 
@@ -1875,7 +593,7 @@ router.post(
         error: error.message,
       });
     }
-  }
+  },
 );
 
 // =======================================================================
@@ -1968,7 +686,7 @@ router.put(
         error: error.message,
       });
     }
-  }
+  },
 );
 
 // =======================================================================
@@ -2046,7 +764,7 @@ router.delete(
         error: error.message,
       });
     }
-  }
+  },
 );
 
 // =======================================================================
@@ -2109,16 +827,16 @@ router.post(
       });
 
       const existingMentorIds = existingProgramMentors.map(
-        (pm) => pm.id_mentor
+        (pm) => pm.id_mentor,
       );
 
       // 5. Tentukan ID yang perlu dihapus dan ditambahkan
       const idsToDelete = existingMentorIds.filter(
-        (id) => !uniqueNewMentorIds.includes(id)
+        (id) => !uniqueNewMentorIds.includes(id),
       );
 
       const idsToAdd = uniqueNewMentorIds.filter(
-        (id) => !existingMentorIds.includes(id)
+        (id) => !existingMentorIds.includes(id),
       );
 
       // 6. Transaksi Database
@@ -2162,7 +880,7 @@ router.post(
         error: error.message,
       });
     }
-  }
+  },
 );
 
 // =======================================================================
@@ -2189,7 +907,7 @@ router.post(
       const newStandardMajorIds = new Set(
         newMajorsFromRequest
           .map((major) => major.id)
-          .filter((id) => typeof id === "number")
+          .filter((id) => typeof id === "number"),
       );
 
       // Ambil semua jurusan yang saat ini terdaftar untuk kampus ini
@@ -2198,15 +916,15 @@ router.post(
         select: { id_standard_major: true },
       });
       const existingStandardMajorIds = new Set(
-        existingMajors.map((major) => major.id_standard_major)
+        existingMajors.map((major) => major.id_standard_major),
       );
 
       // Tentukan jurusan mana yang akan ditambahkan dan dihapus
       const idsToAdd = [...newStandardMajorIds].filter(
-        (id) => !existingStandardMajorIds.has(id)
+        (id) => !existingStandardMajorIds.has(id),
       );
       const idsToRemove = [...existingStandardMajorIds].filter(
-        (id) => !newStandardMajorIds.has(id)
+        (id) => !newStandardMajorIds.has(id),
       );
 
       // Gunakan transaksi untuk memastikan semua operasi berhasil atau tidak sama sekali
@@ -2248,7 +966,7 @@ router.post(
         error: error.message,
       });
     }
-  }
+  },
 );
 
 // =======================================================================
@@ -2331,11 +1049,11 @@ router.get(
 
       formattedData.logo_url = formatPathToUrl(
         formattedData.path_logo,
-        BASE_URL
+        BASE_URL,
       );
       formattedData.banner_url = formatPathToUrl(
         formattedData.path_banner,
-        BASE_URL
+        BASE_URL,
       );
       delete formattedData.path_logo;
       delete formattedData.path_banner;
@@ -2352,7 +1070,7 @@ router.get(
         error: error.message,
       });
     }
-  }
+  },
 );
 
 // =======================================================================
@@ -2373,7 +1091,7 @@ const campusImageStorage = multer.diskStorage({
       null,
       `campus-${file.fieldname}-` +
         uniqueSuffix +
-        path.extname(file.originalname)
+        path.extname(file.originalname),
     );
   },
 });
@@ -2384,7 +1102,7 @@ const uploadCampusImages = multer({
   fileFilter: (req, file, cb) => {
     const fileTypes = /jpeg|jpg|png|gif/;
     const extname = fileTypes.test(
-      path.extname(file.originalname).toLowerCase()
+      path.extname(file.originalname).toLowerCase(),
     );
     const mimetype = fileTypes.test(file.mimetype);
     if (mimetype && extname) return cb(null, true);
@@ -2494,7 +1212,7 @@ router.put(
         error: error.message,
       });
     }
-  }
+  },
 );
 
 // =======================================================================
@@ -2506,10 +1224,15 @@ router.put(
   authorizeRoles(["campus"]),
   async (req, res) => {
     const idCampus = req.user.id;
-    const { description, vision_mission } = req.body;
+    const { campus_website, description, vision_mission } = req.body;
+    // console.log(req.body);
 
     // Cek apakah ada data yang dikirim untuk diperbarui
-    if (description === undefined && vision_mission === undefined) {
+    if (
+      description === undefined &&
+      vision_mission === undefined &&
+      campus_website === undefined
+    ) {
       return res
         .status(400)
         .json({ message: "Tidak ada data yang dikirim untuk diperbarui." });
@@ -2517,6 +1240,10 @@ router.put(
 
     try {
       const dataToUpdate = {};
+
+      if (campus_website !== undefined) {
+        dataToUpdate.website_campus = campus_website;
+      }
 
       if (description !== undefined) {
         dataToUpdate.description = description;
@@ -2554,7 +1281,7 @@ router.put(
         error: error.message,
       });
     }
-  }
+  },
 );
 
 // =======================================================================
@@ -2624,7 +1351,7 @@ router.put(
         error: error.message,
       });
     }
-  }
+  },
 );
 
 // =======================================================================
@@ -2695,7 +1422,7 @@ router.delete(
         error: error.message,
       });
     }
-  }
+  },
 );
 
 // =======================================================================
@@ -2819,7 +1546,7 @@ router.post(
         error: error.message,
       });
     }
-  }
+  },
 );
 
 // =======================================================================
@@ -2915,7 +1642,7 @@ router.put(
         req.files.forEach((file) => {
           // Fieldname format: new_resources[0][file]
           const match = file.fieldname.match(
-            /^new_resources\[(\d+)\]\[file\]$/
+            /^new_resources\[(\d+)\]\[file\]$/,
           );
           if (match) {
             setResourceData(match[1], "file", file);
@@ -2926,7 +1653,7 @@ router.put(
       const newResources = Object.values(newResourcesMap);
       // Filter resource yang memiliki type ATAU memiliki file (jika type lupa dikirim)
       const validNewResources = newResources.filter(
-        (res) => res.type || res.file
+        (res) => res.type || res.file,
       );
       // console.log("New Resources Parsed:", validNewResources);
 
@@ -2938,11 +1665,11 @@ router.put(
       if (req.body.kept_resource_ids) {
         if (Array.isArray(req.body.kept_resource_ids)) {
           keptResourceIds = req.body.kept_resource_ids.map((id) =>
-            parseInt(id, 10)
+            parseInt(id, 10),
           );
         } else if (typeof req.body.kept_resource_ids === "object") {
           keptResourceIds = Object.values(req.body.kept_resource_ids).map(
-            (id) => parseInt(id, 10)
+            (id) => parseInt(id, 10),
           );
         } else {
           keptResourceIds = [parseInt(req.body.kept_resource_ids, 10)];
@@ -2985,7 +1712,7 @@ router.put(
                 const existingRes = materi.materi_resource.find(
                   (r) =>
                     r.type === "file" &&
-                    normalizeResourcePath(r.path_file) === normalizedUrl
+                    normalizeResourcePath(r.path_file) === normalizedUrl,
                 );
 
                 if (existingRes) {
@@ -3043,7 +1770,7 @@ router.put(
 
       // ID resource yang akan DIHAPUS
       const resourcesToDeleteIds = existingResourceIds.filter(
-        (id) => !keptResourceIds.includes(id)
+        (id) => !keptResourceIds.includes(id),
       );
 
       // Cek Batas Maksimal Resource (Max 3)
@@ -3060,24 +1787,24 @@ router.put(
       // Refactor: Jangan hapus data di database jika file yang sama ditambahkan lagi (Rescue logic)
       const newResourcePaths = resourcesToCreate.map((r) => r.path_file);
       const resourcesToDelete = materi.materi_resource.filter((r) =>
-        resourcesToDeleteIds.includes(r.id)
+        resourcesToDeleteIds.includes(r.id),
       );
 
       const idsToRescue = resourcesToDelete
         .filter(
-          (r) => r.type === "file" && newResourcePaths.includes(r.path_file)
+          (r) => r.type === "file" && newResourcePaths.includes(r.path_file),
         )
         .map((r) => r.id);
 
       const finalResourcesToDeleteIds = resourcesToDeleteIds.filter(
-        (id) => !idsToRescue.includes(id)
+        (id) => !idsToRescue.includes(id),
       );
 
       // Hapus file fisik untuk resource yang akan dihapus (hanya tipe 'file')
       // Dilakukan setelah validasi resource baru untuk memastikan file tidak sedang digunakan ulang
       if (finalResourcesToDeleteIds.length > 0) {
         const deletedFileResources = materi.materi_resource.filter(
-          (r) => r.type === "file" && finalResourcesToDeleteIds.includes(r.id)
+          (r) => r.type === "file" && finalResourcesToDeleteIds.includes(r.id),
         );
 
         for (const res of deletedFileResources) {
@@ -3091,7 +1818,7 @@ router.put(
 
           // Cek apakah file ini digunakan oleh resource yang baru akan dibuat (resourcesToCreate)
           const isReusedInNew = resourcesToCreate.some(
-            (newRes) => newRes.path_file === res.path_file
+            (newRes) => newRes.path_file === res.path_file,
           );
 
           if (
@@ -3129,7 +1856,7 @@ router.put(
         transactionQueries.push(
           prisma.materi_resource.createMany({
             data: resourcesToCreate,
-          })
+          }),
         );
       }
 
@@ -3153,7 +1880,7 @@ router.put(
         error: error.message,
       });
     }
-  }
+  },
 );
 
 // =======================================================================
@@ -3235,7 +1962,7 @@ router.delete(
         error: error.message,
       });
     }
-  }
+  },
 );
 
 // send message to mentee
@@ -3353,7 +2080,7 @@ router.post(
         error: error.message,
       });
     }
-  }
+  },
 );
 
 // send bulk message to mentees
@@ -3432,7 +2159,7 @@ router.post(
         error: error.message,
       });
     }
-  }
+  },
 );
 
 // =======================================================================
@@ -3533,7 +2260,7 @@ router.get(
         (item) => ({
           status: item.education_status,
           total: item._count.education_status,
-        })
+        }),
       );
 
       return res.status(200).json({
@@ -3555,7 +2282,7 @@ router.get(
         error: error.message,
       });
     }
-  }
+  },
 );
 
 // =======================================================================
@@ -3626,7 +2353,7 @@ router.get(
         error: error.message,
       });
     }
-  }
+  },
 );
 
 // test midleware
@@ -3647,7 +2374,7 @@ router.post(
         error: error.message,
       });
     }
-  }
+  },
 );
 
 export default router;

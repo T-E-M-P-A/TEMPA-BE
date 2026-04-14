@@ -21,6 +21,7 @@ model mentee {
   city                  String?                  @db.VarChar(225)
   subdistrict           String?                  @db.VarChar(225)
   ward                  String?                  @db.VarChar(225)
+  mentee_attendance     mentee_attendance[]
   mentee_major_interest mentee_major_interest[]
   mentee_progress       mentee_progress[]
   program_feedback      program_feedback[]
@@ -39,9 +40,10 @@ model admin {
 model mentor {
   id                Int                 @id @default(autoincrement())
   name              String              @db.VarChar(50)
+  email             String              @unique(map: "email") @db.VarChar(225)
   id_campus         Int
   password          String?             @db.Text
-  nik               Int                 @unique(map: "nik")
+  nik               Int?
   mentor_type       mentor_mentor_type
   course_instructor course_instructor[]
   campus            campus              @relation(fields: [id_campus], references: [id], onDelete: Cascade, map: "mentor_ibfk_1")
@@ -73,11 +75,13 @@ model campus {
   seen                              Int                        @default(0)
   sub_google_id                     String                     @unique
   campus_subscription               campus_subscription[]
+  campus_wallet                     campus_wallet?
   major                             major[]
   mentor                            mentor[]
   program_program_id_campusTocampus program[]                  @relation("program_id_campusTocampus")
   transaction                       transaction[]
   view_log_campus                   view_log_campus[]
+  wallet_log                        wallet_log[]
 }
 
 model standard_major {
@@ -127,7 +131,9 @@ model program {
   lat                              Float?              @db.Float
   lng                              Float?              @db.Float
   seen                             Int?                @default(0)
+  expired_presensi                 Json?
   materi                           materi[]
+  mentee_attendance                mentee_attendance[]
   mentee_progress                  mentee_progress[]
   campus_program_id_campusTocampus campus              @relation("program_id_campusTocampus", fields: [id_campus], references: [id], onDelete: Cascade, map: "program_ibfk_2")
   campus_program_id_majorTocampus  major               @relation("program_id_majorTocampus", fields: [id_major], references: [id], onDelete: Cascade, map: "program_ibfk_3")
@@ -270,7 +276,7 @@ model view_log_campus {
 
 model campus_subscription {
   id                   Int                        @id @default(autoincrement())
-  doku_invoice         Int
+  invoice_no           String                     @unique(map: "invoice_no") @db.VarChar(225)
   status               campus_subscription_status
   id_campus            Int
   id_package           Int
@@ -304,24 +310,62 @@ model subscription_package {
 }
 
 model transaction {
-  id                   Int                  @id @default(autoincrement())
-  transaction_date     DateTime             @db.Timestamp(0)
-  doku_invoice_no      String?              @db.VarChar(100)
-  payment_channel      String?              @db.VarChar(50)
+  id                   Int                      @id @default(autoincrement())
+  transaction_date     DateTime                 @db.Timestamp(0)
+  invoice_no           String                   @unique(map: "invoice_no") @db.VarChar(100)
+  payment_channel      String?                  @db.VarChar(50)
   status               transaction_status
   id_campus            Int
-  transaction_no       String               @db.VarChar(50)
-  id_package           Int
+  transaction_no       String                   @db.VarChar(50)
+  id_package           Int?
   free_trial           Boolean
   amount_original      BigInt
   amount_final         BigInt
-  duration_month       Int
-  paid_at              DateTime             @db.Timestamp(0)
-  campus               campus               @relation(fields: [id_campus], references: [id], onDelete: NoAction, map: "transaction_ibfk_1")
-  subscription_package subscription_package @relation(fields: [id_package], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "transaction_ibfk_2")
+  duration_month       Int?
+  paid_at              DateTime                 @db.Timestamp(0)
+  type_payment         transaction_type_payment
+  campus               campus                   @relation(fields: [id_campus], references: [id], onDelete: NoAction, map: "transaction_ibfk_1")
+  subscription_package subscription_package?    @relation(fields: [id_package], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "transaction_ibfk_2")
 
   @@index([id_campus], map: "id_campus")
   @@index([id_package], map: "id_package")
+}
+
+model mentee_attendance {
+  id              Int                      @id @default(autoincrement())
+  attendance_date DateTime                 @db.DateTime(0)
+  status          mentee_attendance_status
+  created_at      DateTime                 @db.Timestamp(0)
+  updated_at      DateTime                 @db.Timestamp(0)
+  id_mentee       Int
+  id_program      Int
+  mentee          mentee                   @relation(fields: [id_mentee], references: [id], onDelete: Cascade, map: "mentee_attendance_ibfk_1")
+  mentee_progress program                  @relation(fields: [id_program], references: [id], onDelete: Cascade, map: "mentee_attendance_ibfk_2")
+
+  @@index([id_mentee, id_program], map: "id_mentee")
+  @@index([id_program], map: "id_program")
+}
+
+model campus_wallet {
+  id                  Int       @id @default(autoincrement())
+  id_campus           Int       @unique(map: "id_campus_2")
+  current_balance     BigInt
+  last_transaction_id Int?
+  update_at           DateTime? @db.Timestamp(0)
+  campus              campus    @relation(fields: [id_campus], references: [id], onDelete: NoAction, map: "campus_wallet_ibfk_1")
+
+  @@index([id_campus], map: "id_campus")
+}
+
+model wallet_log {
+  id         Int             @id @default(autoincrement())
+  id_campus  Int
+  amount     BigInt
+  type       wallet_log_type
+  created_at DateTime        @db.Timestamp(0)
+  campus     campus          @relation(fields: [id_campus], references: [id], onDelete: NoAction, map: "wallet_log_ibfk_1")
+
+  @@index([id_campus], map: "id_campus")
 }
 
 enum visibility_materi {
@@ -386,9 +430,25 @@ enum campus_subscription_status {
   cancelled
 }
 
+enum mentee_attendance_status {
+  present
+  absent
+  null
+}
+
+enum wallet_log_type {
+  topup
+  usage
+}
+
 enum transaction_status {
   pending
   paid
-  failed
+  cancelled
   expired
+}
+
+enum transaction_type_payment {
+  subscription
+  topup
 }

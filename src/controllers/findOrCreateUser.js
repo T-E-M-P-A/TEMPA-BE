@@ -4,6 +4,7 @@ import prisma from "./../../prisma/client.js";
  * @param {object} userData - User data from payload Google
  * @returns {Promise<object>} - User objects (discovered or newly created), including local user_id.
  */
+// for mentee
 export async function findOrCreateUser(userData) {
   const { sub: googleSubId, email, name } = userData;
 
@@ -25,14 +26,15 @@ export async function findOrCreateUser(userData) {
       },
     });
 
-    console.log(`Akun baru dibuat dengan ID lokal: ${user.id}`);
+    // console.log(`Akun baru dibuat dengan ID lokal: ${user.id}`);
   } else {
-    console.log(`Pengguna ditemukan: ${user.email}. ID lokal: ${user.id}`);
+    // console.log(`Pengguna ditemukan: ${user.email}. ID lokal: ${user.id}`);
   }
 
   return user;
 }
 
+// for campus
 export async function findOrCreateCampus(userData) {
   const { sub: googleSubId, email, name } = userData;
 
@@ -55,9 +57,16 @@ export async function findOrCreateCampus(userData) {
       },
     });
 
-    console.log(`Akun baru dibuat dengan ID lokal: ${user.id}`);
+    const createBalance = await prisma.campus_wallet.create({
+      data: {
+        id_campus: user.id,
+        balance: 0,
+      },
+    });
+
+    // console.log(`Akun baru dibuat dengan ID lokal: ${user.id}`);
   } else {
-    console.log(`Pengguna ditemukan: ${user.email}. ID lokal: ${user.id}`);
+    // console.log(`Pengguna ditemukan: ${user.email}. ID lokal: ${user.id}`);
   }
 
   return user;

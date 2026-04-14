@@ -1,6 +1,6 @@
 /**
  * Middleware to restrict access based on user roles.
- * @param {string[]} allowedRoles - ['admin', 'mentee'].
+ * @param {string[]} allowedRoles - ['admin', 'mentee', 'mentor'].
  */
 const authorizeRoles = (allowedRoles) => {
   return (req, res, next) => {
@@ -25,4 +25,4 @@ const authorizeRoles = (allowedRoles) => {
   };
 };
 
-export default authorizeRoles
+export default authorizeRoles;
