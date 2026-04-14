@@ -60,7 +60,7 @@ export async function findOrCreateCampus(userData) {
     const createBalance = await prisma.campus_wallet.create({
       data: {
         id_campus: user.id,
-        balance: 0,
+        current_balance: 0,
       },
     });
 
