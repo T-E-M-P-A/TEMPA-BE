@@ -3,6 +3,7 @@ import { createCertificate } from "./createCertificate.js";
 import nodemailer from "nodemailer";
 import path from "path";
 import fs from "fs";
+import { sendEmailWithAttachment } from "./templateEmail.js";
 
 const transporter = nodemailer.createTransport({
   service: "gmail",
@@ -12,19 +13,25 @@ const transporter = nodemailer.createTransport({
   },
 });
 
+const MAX_RETRIES = 5;
+const BASE_DELAY = 2000; // 2 second
+
+// Worker function using delay queue and exponantial backtoff
 const worker = async (task) => {
+  task.retryCount = task.retryCount || 0;
   try {
-    console.log(`Processing: ${task.username}`);
-    // console.log(`${task.startProgramDate} `);
-    // Generate PDF Bytes (Memory Only)
+    console.log(`[PROCESS] ${task.username} - Percobaan: ${task.retryCount}`);
+
+    // Generate certificate
     const pdfBytes = await createCertificate(
       task.username,
       task.startProgramDate,
       task.endProgramDate,
       task.campusName,
     );
-    const pdfBuffer = Buffer.from(pdfBytes); // Konversi ke Node.js Buffer
+    const pdfBuffer = Buffer.from(pdfBytes);
 
+    // get logo
     const logoPath = path.join(process.cwd(), "assets", "logo-text.png");
     const attachments = [
       {
@@ -41,40 +48,39 @@ const worker = async (task) => {
       });
     }
 
-    // send email with attachment from buffer
-    await transporter.sendMail({
-      from: '"Campus Team" <no-reply@yourcampus.id>',
-      to: task.email,
-      subject: `Sertifikat Kelulusan - ${task.username}`,
-      html: `
-              <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e0e0e0; border-radius: 8px; background-color: #ffffff;">
-                <div style="text-align: center; margin-bottom: 20px;">
-                  ${
-                    fs.existsSync(logoPath)
-                      ? '<img src="cid:logoTempa" alt="TEMPA Logo" style="max-width: 150px; height: auto;" />'
-                      : "<h2>TEMPA</h2>"
-                  }
-                </div>
-                <h2 style="color: #333; text-align: center;">Pesan Baru dari ${task.campusName}</h2>
-                <p style="font-size: 16px; color: #555;">Halo <strong>${task.username}</strong>,</p>
-                <p style="font-size: 16px; color: #555;">Anda menerima pesan baru:</p>
-                <div style="background-color: #f9f9f9; border-left: 5px solid #013B35; padding: 15px; margin: 20px 0;">
-                  <p style="margin: 0; font-weight: bold; color: #013B35;">Sertifikat Kelulusan - ${task.username}</p>
-                  <p style="margin: 5px 0 0; color: #555;">Halo ${task.username}, selamat atas kelulusan Anda! Terlampir adalah sertifikat Anda.</p>
-                </div>
-                <p style="font-size: 16px; color: #555;">Salam hangat,<br><strong>${task.campusName}</strong></p>
-              </div>
-            `,
-      attachments: attachments,
-    });
+    // template email
+    await sendEmailWithAttachment(task, attachments, logoPath);
     return `Done: ${task.username}`;
   } catch (err) {
-    console.error(`Processing Failed for ${task.username}:`, err);
-    throw err; // Throw an error to let fastq know the process failed
+    // check error rate limit (429 or 451)
+    const isRateLimit =
+      err.responseCode === 429 ||
+      err.responseCode === 451 ||
+      err.message.includes("limit");
+
+    if (isRateLimit && task.retryCount < MAX_RETRIES) {
+      task.retryCount++;
+
+      // Formula Exponential Backoff: delay * 2^retryCount
+      const delay = BASE_DELAY * Math.pow(2, task.retryCount);
+
+      console.warn(
+        `[RATE LIMIT] ${task.username} tertunda. Percobaan ke-${task.retryCount}. Tunggu ${delay}ms`,
+      );
+
+      // delay and send again
+      await new Promise((resolve) => setTimeout(resolve, delay));
+
+      // (Re-queue)
+      return generateCertificateQueue.push(task);
+    } else {
+      console.error(`[FATAL] Gagal memproses ${task.username}:`, err.message);
+      throw err;
+    }
   }
 };
 
 // Queue initialization (Concurrency: 2 means 2 certificates are processed at once)
-const generateCertificateQueue = fastq.promise(worker, 2);
+const generateCertificateDelayQueue = fastq.promise(worker, 2);
 
-export default generateCertificateQueue;
+export default generateCertificateDelayQueue;

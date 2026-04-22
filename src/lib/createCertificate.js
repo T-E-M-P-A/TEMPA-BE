@@ -36,13 +36,29 @@ export async function createCertificate(
 
     const pages = pdfDoc.getPages();
     const firstPage = pages[0];
+    const { width } = firstPage.getSize();
 
-    // mentee name
+    // Konfigurasi area nama
+    let fontSize = 60; // Ukuran default
+    const paddingLeft = 59;
+    const greenElementStartX = 480; // Sesuaikan angka ini (koordinat X awal elemen hijau)
+    const maxWidth = greenElementStartX - paddingLeft;
+    const fontBoldEmbed = await pdfDoc.embedFont("Helvetica-Bold");
+
+    // Logika penyesuaian ukuran font secara otomatis
+    let textWidth = fontBoldEmbed.widthOfTextAtSize(userName, fontSize);
+
+    while (textWidth > maxWidth && fontSize > 20) {
+      fontSize -= 2;
+      textWidth = fontBoldEmbed.widthOfTextAtSize(userName, fontSize);
+    }
+
+    // Mentee name dengan ukuran font yang sudah disesuaikan
     firstPage.drawText(userName, {
       x: 59,
       y: 375,
-      size: 60,
-      font: await pdfDoc.embedFont("Helvetica-Bold"),
+      size: fontSize,
+      font: fontBoldEmbed,
       color: rgb(0, 0, 0),
     });
 

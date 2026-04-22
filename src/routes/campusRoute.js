@@ -15,7 +15,8 @@ import bcrypt from "bcrypt";
 import nodemailer from "nodemailer";
 import mailQueue from "../lib/mailQueue.js";
 import * as campusController from "../controllers/campusController.js";
-import generateCertificateQueue from "../lib/generateCertificate.js";
+import generateCertificateDelayQueue from "../lib/generateCertificate.js";
+import generateCertificateFifo from "../lib/sendCertificateFifo.js";
 
 const router = express.Router();
 
@@ -340,7 +341,6 @@ router.post(
         id: {
           in: menteeId,
         },
-        // Sesuaikan nama relasi di schema.prisma Anda (contoh: program_feedbacks)
         program_feedback: {
           some: {
             id_program: idProgram,
@@ -353,6 +353,7 @@ router.post(
       },
     });
 
+    // check if mentee is already assign feedback
     if (menteesWithFeedback.length === 0) {
       return res.status(400).send({
         status: "error",
@@ -361,11 +362,13 @@ router.post(
       });
     }
 
+    // get campus name
     const campus = await prisma.campus.findUnique({
       where: { id: idCampus },
       select: { campus_name: true },
     });
 
+    // get program name
     const getProgram = await prisma.program.findUnique({
       where: {
         id: idProgram,
@@ -378,7 +381,8 @@ router.post(
     const campusName = campus?.campus_name || "Campus Team";
 
     menteesWithFeedback.forEach((mentee) => {
-      generateCertificateQueue
+      // FIFO
+      generateCertificateFifo
         .push({
           ...mentee,
           campusName: campusName,
@@ -389,6 +393,18 @@ router.post(
         .catch((err) =>
           console.error(`Gagal masuk antrean untuk ${mentee.username}:`, err),
         );
+      // delay queue
+      // generateCertificateDelayQueue
+      //   .push({
+      //     ...mentee,
+      //     campusName: campusName,
+      //     idProgram: idProgram,
+      //     startProgramDate: getProgram?.start_program_date,
+      //     endProgramDate: getProgram?.end_program_date,
+      //   })
+      //   .catch((err) =>
+      //     console.error(`Gagal masuk antrean untuk ${mentee.username}:`, err),
+      //   );
     });
 
     res.send({
