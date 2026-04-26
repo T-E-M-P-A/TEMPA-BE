@@ -1437,20 +1437,30 @@ export const getPresensi = async (programId, menteeId) => {
 
   if (!getProgram) throw new AppError("Program tidak ditemukan", 404);
 
+  // PAKSA menggunakan timezone Asia/Jakarta
   const now = new Date();
+  const wibTime = new Date(
+    now.toLocaleString("en-US", { timeZone: "Asia/Jakarta" }),
+  );
 
-  const currentHours = now.getHours();
-  const currentMinutes = now.getMinutes();
-  const currentSeconds = now.getSeconds();
+  // Gunakan wibTime, bukan now
+  const currentHours = wibTime.getHours();
+  const currentMinutes = wibTime.getMinutes();
+  const currentSeconds = wibTime.getSeconds();
 
   const startDate = new Date(getProgram.start_program_date);
 
+  // Bagian sisa kodingan kamu tetap sama, pastikan gunakan tahun/bulan/tgl dari wibTime juga agar sinkron
   const startDayOnly = new Date(
     startDate.getFullYear(),
     startDate.getMonth(),
     startDate.getDate(),
   );
-  const todayOnly = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const todayOnly = new Date(
+    wibTime.getFullYear(),
+    wibTime.getMonth(),
+    wibTime.getDate(),
+  );
 
   const diffTime = todayOnly - startDayOnly;
   const currentDayNumber = Math.floor(diffTime / (1000 * 60 * 60 * 24)) + 1;
@@ -1466,7 +1476,6 @@ export const getPresensi = async (programId, menteeId) => {
     .split(":")
     .map(Number);
 
-  // change to second
   const totalSecondsNow =
     currentHours * 3600 + currentMinutes * 60 + currentSeconds;
   const totalSecondsExpiry = expHour * 3600 + expMin * 60 + expSec;
