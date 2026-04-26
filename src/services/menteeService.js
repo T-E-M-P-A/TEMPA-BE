@@ -1438,9 +1438,13 @@ export const getPresensi = async (programId, menteeId) => {
   if (!getProgram) throw new AppError("Program tidak ditemukan", 404);
 
   const now = new Date();
+
+  const currentHours = now.getHours();
+  const currentMinutes = now.getMinutes();
+  const currentSeconds = now.getSeconds();
+
   const startDate = new Date(getProgram.start_program_date);
 
-  // Set jam ke 00:00 untuk menghitung selisih hari dengan akurat
   const startDayOnly = new Date(
     startDate.getFullYear(),
     startDate.getMonth(),
@@ -1448,29 +1452,26 @@ export const getPresensi = async (programId, menteeId) => {
   );
   const todayOnly = new Date(now.getFullYear(), now.getMonth(), now.getDate());
 
-  // Hitung selisih hari (Hari ke-1, Hari ke-2, dst)
   const diffTime = todayOnly - startDayOnly;
   const currentDayNumber = Math.floor(diffTime / (1000 * 60 * 60 * 24)) + 1;
 
-  // Cari config untuk hari ini
-  const sessionConfig = getProgram.expired_presensi; // Array yang kamu berikan
+  const sessionConfig = getProgram.expired_presensi;
   const dayConfig = sessionConfig.find((c) => c.day === currentDayNumber);
 
   if (!dayConfig) {
     throw new AppError("Tidak ada jadwal presensi untuk hari ini", 400);
   }
 
-  // Gabungkan tanggal hari ini dengan jam expired dari config
-  const [expHour, expMin, expSec] = dayConfig.expiry_time.split(":");
-  const expiryDate = new Date();
-  expiryDate.setHours(
-    parseInt(expHour),
-    parseInt(expMin),
-    parseInt(expSec),
-    999,
-  );
+  const [expHour, expMin, expSec] = dayConfig.expiry_time
+    .split(":")
+    .map(Number);
 
-  if (now > expiryDate) {
+  // change to second
+  const totalSecondsNow =
+    currentHours * 3600 + currentMinutes * 60 + currentSeconds;
+  const totalSecondsExpiry = expHour * 3600 + expMin * 60 + expSec;
+
+  if (totalSecondsNow > totalSecondsExpiry) {
     throw new AppError(
       `Batas waktu presensi hari ini (${dayConfig.expiry_time}) telah lewat`,
       410,
