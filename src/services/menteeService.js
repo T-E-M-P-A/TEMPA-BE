@@ -536,10 +536,22 @@ export const registerProgram = async (idMentee, idProgramInt) => {
 
     // C. Validasi Tanggal
     const now = new Date();
-    if (new Date(programData.start_regis_date) > now)
+
+    //  reset time to 00:00:00.000 local
+    const startRegis = new Date(programData.start_regis_date);
+    const endRegis = new Date(programData.end_regis_date);
+
+    const startClean = new Date(startRegis).setHours(0, 0, 0, 0);
+    const endClean = new Date(endRegis).setHours(23, 59, 59, 999); // Sampai akhir hari
+    const nowClean = new Date(now).getTime();
+
+    if (nowClean < startClean) {
       throw new AppError("Pendaftaran belum dibuka!", 400);
-    if (new Date(programData.end_regis_date) < now)
+    }
+
+    if (nowClean > endClean) {
       throw new AppError("Pendaftaran sudah tutup!", 400);
+    }
 
     // D. Validasi Kuota Fisik
     if (programData.capacity <= 0) {
