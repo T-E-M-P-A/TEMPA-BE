@@ -336,31 +336,31 @@ router.post(
 
     // console.log(menteeId);
 
-    const menteesWithFeedback = await prisma.mentee.findMany({
-      where: {
-        id: {
-          in: menteeId,
-        },
-        program_feedback: {
-          some: {
-            id_program: idProgram,
-          },
-        },
-      },
-      select: {
-        username: true,
-        email: true,
-      },
-    });
+    // const menteesWithFeedback = await prisma.mentee.findMany({
+    //   where: {
+    //     id: {
+    //       in: menteeId,
+    //     },
+    //     program_feedback: {
+    //       some: {
+    //         id_program: idProgram,
+    //       },
+    //     },
+    //   },
+    //   select: {
+    //     username: true,
+    //     email: true,
+    //   },
+    // });
 
     // check if mentee is already assign feedback
-    if (menteesWithFeedback.length === 0) {
-      return res.status(400).send({
-        status: "error",
-        message:
-          "Tidak ada mentee yang bisa diproses karena belum mengisi feedback.",
-      });
-    }
+    // if (menteesWithFeedback.length === 0) {
+    //   return res.status(400).send({
+    //     status: "error",
+    //     message:
+    //       "Tidak ada mentee yang bisa diproses karena belum mengisi feedback.",
+    //   });
+    // }
 
     // get campus name
     const campus = await prisma.campus.findUnique({

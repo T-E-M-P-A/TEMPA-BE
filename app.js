@@ -6,6 +6,7 @@ import paymentGateway from "./src/routes/paymentGateway.js";
 import adminRoutes from "./src/routes/adminRoutes.js";
 import campusRoutes from "./src/routes/campusRoute.js";
 import mentorRoutes from "./src/routes/mentorRoutes.js";
+import experimentalRoute from "./src/routes/experimentalRoute.js";
 import path from "path";
 import fs from "fs";
 import { fileURLToPath } from "url";
@@ -70,6 +71,9 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
 app.use("/public", express.static(path.join(process.cwd(), "uploads")));
+
+// experimental route
+app.use("/api/experimental", experimentalRoute);
 
 // mentee route
 app.use("/api/v1", menteeRoutes);
