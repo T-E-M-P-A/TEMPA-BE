@@ -103,11 +103,15 @@ export const detailCampus = async (req, res, next) => {
 // register program
 export const registerProgram = async (req, res, next) => {
   try {
-    const idMentee = req.user.id;
-    const { idProgram } = req.params;
+    // const idMentee = req.user.id;
+    const { idProgram, idMentee } = req.params;
     const idProgramInt = parseInt(idProgram);
+    const idMenteeInt = parseInt(idMentee);
 
-    const result = await menteeService.registerProgram(idMentee, idProgramInt);
+    const result = await menteeService.registerProgram(
+      idMenteeInt,
+      idProgramInt,
+    );
 
     res.status(201).json({
       message: result.message,

@@ -509,6 +509,8 @@ export const registerProgram = async (idMentee, idProgramInt) => {
     throw new AppError("ID Program atau ID Mentee tidak ditemukan.", 404);
   }
 
+  console.log("id mentee: ", idMentee);
+
   // 1. Jalankan Transaction sejak awal untuk keamanan data
   return await prisma.$transaction(async (tx) => {
     // A. Check existing enrollment (pindahkan ke dalam tx agar konsisten)
@@ -554,15 +556,15 @@ export const registerProgram = async (idMentee, idProgramInt) => {
     }
 
     // D. Validasi Kuota Fisik
-    if (programData.capacity <= 0) {
+    console.log("capacity: ", programData.capacity);
+    // Memastikan capacity bukan null DAN capacity kurang dari atau sama dengan 0
+    if (programData.capacity !== null && programData.capacity <= 0) {
       throw new AppError("Kuota program sudah penuh!", 400);
     }
 
     // E. Validasi Saldo Kampus (Penting!)
     const wallet = programData.campus_program_id_campusTocampus.campus_wallet;
     if (!wallet || Number(wallet.current_balance) < 15000) {
-      // Kita beri pesan kuota penuh agar mentee tidak bingung,
-      // padahal sebenarnya "kuota biaya" kampus habis.
       throw new AppError(
         "Kuota pendaftaran untuk program ini telah mencapai batas maksimal.",
         400,
@@ -582,19 +584,49 @@ export const registerProgram = async (idMentee, idProgramInt) => {
     });
 
     // Update Program (Kurangi Kapasitas)
-    await tx.program.update({
-      where: { id: idProgramInt },
+    const updatedProgram = await tx.program.updateMany({
+      where: {
+        id: idProgramInt,
+        capacity: { gt: 0 }, // HANYA potong jika capacity saat ini masih di atas 0
+      },
       data: { capacity: { decrement: 1 } },
     });
+    // await tx.program.update({
+    //   where: { id: idProgramInt },
+    //   data: { capacity: { decrement: 1 } },
+    // });
+    if (updatedProgram.count === 0) {
+      throw new AppError(
+        "Mohon maaf, kuota program baru saja habis direbut pendaftar lain!",
+        400,
+      );
+    }
 
     // Update Wallet (Kurangi Saldo)
-    await tx.campus_wallet.update({
-      where: { id_campus: programData.id_campus },
+    const updatedWallet = await tx.campus_wallet.updateMany({
+      where: {
+        id_campus: programData.id_campus,
+        current_balance: { gte: 15000 }, // HANYA potong jika saldo saat ini masih >= 15000
+      },
       data: {
         current_balance: { decrement: 15000 },
         update_at: now,
       },
     });
+    // await tx.campus_wallet.update({
+    //   where: { id_campus: programData.id_campus },
+    //   data: {
+    //     current_balance: { decrement: 15000 },
+    //     update_at: now,
+    //   },
+    // });
+
+    if (updatedWallet.count === 0) {
+      throw new AppError(
+        "Kuota pendaftaran untuk program ini telah mencapai batas maksimal.",
+        400,
+      );
+    }
 
     // Record Log
     await tx.wallet_log.create({

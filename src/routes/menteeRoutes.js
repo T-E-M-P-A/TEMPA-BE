@@ -57,7 +57,7 @@ router.get(
 
 // register program for mentee
 router.post(
-  "/mentee/register-program/:idProgram",
+  "/mentee/register-program/:idProgram/:idMentee",
   authenticateUser,
   authorizeRoles(["mentee"]),
   menteeController.registerProgram,
