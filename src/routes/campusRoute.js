@@ -353,13 +353,13 @@ router.post(
       },
     });
 
-    if (menteesWithFeedback.length === 0) {
-      return res.status(400).send({
-        status: "error",
-        message:
-          "Tidak ada mentee yang bisa diproses karena belum mengisi feedback.",
-      });
-    }
+    // if (menteesWithFeedback.length === 0) {
+    //   return res.status(400).send({
+    //     status: "error",
+    //     message:
+    //       "Tidak ada mentee yang bisa diproses karena belum mengisi feedback.",
+    //   });
+    // }
 
     const campus = await prisma.campus.findUnique({
       where: { id: idCampus },
