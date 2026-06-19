@@ -6,7 +6,9 @@ import paymentGateway from "./src/routes/paymentGateway.js";
 import adminRoutes from "./src/routes/adminRoutes.js";
 import campusRoutes from "./src/routes/campusRoute.js";
 import mentorRoutes from "./src/routes/mentorRoutes.js";
+import experimentalRoute from "./src/routes/experimentalRoute.js";
 import path from "path";
+import fs from "fs";
 import { fileURLToPath } from "url";
 import helmet from "helmet";
 import rateLimit from "express-rate-limit";
@@ -55,11 +57,23 @@ app.use(
 
 // app.use(limiter);
 
+// Buat stream untuk menulis ke file access.log
+const accessLogStream = fs.createWriteStream(
+  path.join(process.cwd(), "access.log"),
+  { flags: "a" }, // 'a' artinya append (menambahkan, bukan menimpa)
+);
+
+// Gunakan morgan dengan stream tersebut
+app.use(morgan("combined", { stream: accessLogStream }));
+
 app.use(morgan("dev"));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
 app.use("/public", express.static(path.join(process.cwd(), "uploads")));
+
+// experimental route
+app.use("/api/experimental", experimentalRoute);
 
 // mentee route
 app.use("/api/v1", menteeRoutes);

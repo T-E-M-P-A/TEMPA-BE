@@ -1,6 +1,5 @@
 import http from "k6/http";
 import { check, sleep } from "k6";
-import { randomIntBetween } from "https://jslib.k6.io/k6-utils/1.2.0/index.js";
 
 export const options = {
   stages: [
@@ -10,30 +9,33 @@ export const options = {
   ],
 };
 
+const menteeIdArray = Array.from({ length: 100 }, (_, i) => i + 1);
+
 export default function () {
-  const randomMenteeId = randomIntBetween(6, 100);
-  const url = `http://localhost:8080/api/v1/mentee/register-program/98/${randomMenteeId}`;
+  const url = "http://localhost:8080/api/v1/generate-certificate";
 
   const targetProgramId = 98;
 
   const payload = JSON.stringify({
-    idMentee: randomMenteeId,
-    idProgramInt: targetProgramId,
+    menteeId: menteeIdArray,
+    idProgram: targetProgramId,
   });
 
   const params = {
     headers: {
       "Content-Type": "application/json",
       Authorization:
-        "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6MSwidXNlcm5hbWUiOiJNIGFmaWZmdWRpbiBBbCBtYWhkaTI4IiwiZW1haWwiOiJtYWZpZmZ1ZGluMjhAZ21haWwuY29tIiwicm9sZSI6Im1lbnRlZSIsImlhdCI6MTc4MTE2NzUzNSwiZXhwIjoxNzgxMjUzOTM1fQ.Lv0kM21x16nMMay334F_YeKLU7ulPb9Tw8vz3mqT5JY",
+        "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6MSwidXNlcm5hbWUiOiJNIGFmaWZmdWRpbiBBbCBtYWhkaTI4IiwiZW1haWwiOiJtYWZpZmZ1ZGluMjhAZ21haWwuY29tIiwicm9sZSI6ImNhbXB1cyIsInZlcmlmIjp7InZlcmlmaWNhdGlvbl9zdGF0dXMiOiJhY2NlcHRlZCIsImNhbXB1c19uYW1lIjoiSU5TVElUVVQgVEVLTk9MT0dJIEJBVEFNIn0sImlhdCI6MTc4MTg1MDQ0NiwiZXhwIjoxNzgxOTM2ODQ2fQ.Zrg_dalW4ICPrPo5AB8UnBOq2bcvtzdyF71sNSmT-9g",
     },
   };
 
   const res = http.post(url, payload, params);
 
+  // Pengecekan disesuaikan untuk respon endpoint sertifikat
   check(res, {
-    "Status 200/201 (Berhasil)": (r) => r.status === 201 || r.status === 200,
-    "Status 400 (Kuota Habis/Sudah Daftar)": (r) => r.status === 400,
+    "Status 200 (Berhasil diproses/masuk antrean)": (r) => r.status === 200,
+    "Status 400 (Gagal validasi)": (r) => r.status === 400,
+    "Status 500 (Error server)": (r) => r.status === 500,
     "Response time < 800ms": (r) => r.timings.duration < 800,
   });
 
