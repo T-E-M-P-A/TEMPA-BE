@@ -333,83 +333,105 @@ router.post(
   async (req, res) => {
     const idCampus = req.user.id;
     const { menteeId, idProgram } = req.body;
+    try {
+      // console.log(menteeId);
 
-    // console.log(menteeId);
-
-    const menteesWithFeedback = await prisma.mentee.findMany({
-      where: {
-        id: {
-          in: menteeId,
+      const menteesWithFeedback = await prisma.mentee.findMany({
+        where: {
+          id: {
+            in: menteeId,
+          },
+          // program_feedback: {
+          //   some: {
+          //     id_program: idProgram,
+          //   },
+          // },
         },
-        // program_feedback: {
-        //   some: {
-        //     id_program: idProgram,
-        //   },
-        // },
-      },
-      select: {
-        username: true,
-        email: true,
-      },
-    });
+        select: {
+          username: true,
+          email: true,
+        },
+      });
 
-    // if (menteesWithFeedback.length === 0) {
-    //   return res.status(400).send({
-    //     status: "error",
-    //     message:
-    //       "Tidak ada mentee yang bisa diproses karena belum mengisi feedback.",
-    //   });
-    // }
+      // if (menteesWithFeedback.length === 0) {
+      //   return res.status(400).send({
+      //     status: "error",
+      //     message:
+      //       "Tidak ada mentee yang bisa diproses karena belum mengisi feedback.",
+      //   });
+      // }
 
-    // get campus name
-    const campus = await prisma.campus.findUnique({
-      where: { id: idCampus },
-      select: { campus_name: true },
-    });
+      // get campus name
+      const campus = await prisma.campus.findUnique({
+        where: { id: idCampus },
+        select: { campus_name: true },
+      });
 
-    // get program name
-    const getProgram = await prisma.program.findUnique({
-      where: {
-        id: idProgram,
-      },
-      select: {
-        start_program_date: true,
-        end_program_date: true,
-      },
-    });
-    const campusName = campus?.campus_name || "Campus Team";
+      // get program name
+      const getProgram = await prisma.program.findUnique({
+        where: {
+          id: idProgram,
+        },
+        select: {
+          start_program_date: true,
+          end_program_date: true,
+        },
+      });
+      const campusName = campus?.campus_name || "Campus Team";
 
-    menteesWithFeedback.forEach((mentee) => {
-      // FIFO
-      // generateCertificateFifo
-      //   .push({
-      //     ...mentee,
-      //     campusName: campusName,
-      //     idProgram: idProgram,
-      //     startProgramDate: getProgram?.start_program_date,
-      //     endProgramDate: getProgram?.end_program_date,
-      //   })
-      //   .catch((err) =>
-      //     console.error(`Gagal masuk antrean untuk ${mentee.username}:`, err),
-      //   );
-      // delay queue
-      generateCertificateDelayQueue
-        .push({
-          ...mentee,
-          campusName: campusName,
-          idProgram: idProgram,
-          startProgramDate: getProgram?.start_program_date,
-          endProgramDate: getProgram?.end_program_date,
-        })
-        .catch((err) =>
-          console.error(`Gagal masuk antrean untuk ${mentee.username}:`, err),
-        );
-    });
+      for (const mentee of menteesWithFeedback) {
+        // await generateCertificateFifo.push({
+        //   ...mentee,
+        //   campusName: campusName,
+        //   idProgram: idProgram,
+        //   startProgramDate: getProgram?.start_program_date,
+        //   endProgramDate: getProgram?.end_program_date,
+        // });
 
-    res.send({
-      status: "success",
-      message: `${menteesWithFeedback.length} dari ${menteeId.length} sertifikat berhasil diproses. Sisanya belum mengisi feedback.`,
-    });
+        // delay queue
+        await generateCertificateDelayQueue
+          .push({
+            ...mentee,
+            campusName: campusName,
+            idProgram: idProgram,
+            startProgramDate: getProgram?.start_program_date,
+            endProgramDate: getProgram?.end_program_date,
+          })
+          .catch((err) =>
+            console.error(`Gagal masuk antrean untuk ${mentee.username}:`, err),
+          );
+      }
+
+      res.send({
+        status: "success",
+        message: `${menteesWithFeedback.length} dari ${menteeId.length} sertifikat berhasil diproses. Sisanya belum mengisi feedback.`,
+      });
+    } catch (error) {
+      // 1. Coba ambil dari properti kustom (jika masih utuh terbawa)
+      let statusCode = error.responseCode || error.statusCode;
+
+      // 2. BACKUP (Bulletproof): Ekstrak kode langsung dari teks pesan error
+      // Karena kita tahu pesan errornya pasti diawali dengan "421" atau "429"
+      if (!statusCode && error.message) {
+        if (error.message.includes("429")) {
+          statusCode = 429;
+        } else if (error.message.includes("421")) {
+          statusCode = 421;
+        }
+      }
+
+      // 3. Jika benar-benar tidak terdeteksi, baru fallback ke 500
+      statusCode = statusCode || 500;
+
+      console.error(
+        `[API Error] Status HTTP yang dikirim ke k6: ${statusCode} | Pesan: ${error.message}`,
+      );
+
+      return res.status(statusCode).send({
+        status: "error",
+        message: error.message || "Terjadi kesalahan pada server",
+      });
+    }
   },
 );
 

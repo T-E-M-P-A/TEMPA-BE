@@ -17,6 +17,7 @@ const workerFIFO = async (task) => {
       task.endProgramDate,
       task.campusName,
     );
+
     const pdfBuffer = Buffer.from(pdfBytes);
 
     // get logo

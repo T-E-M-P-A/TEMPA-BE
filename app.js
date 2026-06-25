@@ -26,7 +26,7 @@ const __dirname = path.dirname(__filename);
 
 app.use(
   cors({
-    origin: ["http://localhost:5173", "https://tempa.ddnsking.com"],
+    origin: ["http://localhost:5173", "https://tempa-fe.vercel.app"],
     methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     credentials: true,
   }),

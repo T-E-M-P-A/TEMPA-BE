@@ -5,12 +5,6 @@ import path from "path";
 import fs from "fs";
 import { sendEmailWithAttachment } from "./templateEmail.js";
 
-const transporter = nodemailer.createTransport({
-  host: "localhost",
-  port: 1025,
-  secure: false,
-});
-
 const MAX_RETRIES = 5;
 const BASE_DELAY = 2000; // 2 second
 
@@ -54,7 +48,9 @@ const worker = async (task) => {
     const isRateLimit =
       err.responseCode === 429 ||
       err.responseCode === 451 ||
-      err.message.includes("limit");
+      err.responseCode === 421 || // <--- Tambahkan ini
+      err.message.includes("limit") ||
+      err.message.includes("blocked"); // <--- Ini juga bagus untuk menangkap teks "temporarily blocked"
 
     if (isRateLimit && task.retryCount < MAX_RETRIES) {
       task.retryCount++;

@@ -1,17 +1,12 @@
 import nodemailer from "nodemailer";
 import path from "path";
 import fs from "fs";
-
-const transporter = nodemailer.createTransport({
-  host: "localhost", // atau '127.0.0.1'
-  port: 1025, // Port SMTP dari Mailpit
-  secure: false,
-});
+import { mockTransport } from "./mockSmtpTransport.js";
 
 // send email with attachment from buffer
 export const sendEmailWithAttachment = async (task, attachments, logoPath) => {
   try {
-    await transporter.sendMail({
+    await mockTransport.sendMail({
       from: '"Campus Team" <no-reply@yourcampus.id>',
       to: task.email,
       subject: `Sertifikat Kelulusan - ${task.username}`,

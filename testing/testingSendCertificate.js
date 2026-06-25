@@ -1,23 +1,22 @@
 import http from "k6/http";
 import { check, sleep } from "k6";
+import exec from "k6/execution"; // KUNCI PERBAIKAN: Import 'exec'
 
 export const options = {
-  stages: [
-    { duration: "30s", target: 20 },
-    { duration: "1m", target: 20 },
-    { duration: "10s", target: 0 },
-  ],
+  vus: 1, // Saya sarankan naikkan VU agar rate-limit benar-benar terpicu
+  iterations: 1000, // Total request tepat 100
 };
-
-const menteeIdArray = Array.from({ length: 100 }, (_, i) => i + 1);
 
 export default function () {
   const url = "http://localhost:8080/api/v1/generate-certificate";
 
   const targetProgramId = 98;
 
+  // PERBAIKAN: Gunakan exec.scenario.iterationInTest
+  const currentMenteeId = exec.scenario.iterationInTest + 1;
+
   const payload = JSON.stringify({
-    menteeId: menteeIdArray,
+    menteeId: [currentMenteeId],
     idProgram: targetProgramId,
   });
 
@@ -25,7 +24,7 @@ export default function () {
     headers: {
       "Content-Type": "application/json",
       Authorization:
-        "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6MSwidXNlcm5hbWUiOiJNIGFmaWZmdWRpbiBBbCBtYWhkaTI4IiwiZW1haWwiOiJtYWZpZmZ1ZGluMjhAZ21haWwuY29tIiwicm9sZSI6ImNhbXB1cyIsInZlcmlmIjp7InZlcmlmaWNhdGlvbl9zdGF0dXMiOiJhY2NlcHRlZCIsImNhbXB1c19uYW1lIjoiSU5TVElUVVQgVEVLTk9MT0dJIEJBVEFNIn0sImlhdCI6MTc4MTg1MDQ0NiwiZXhwIjoxNzgxOTM2ODQ2fQ.Zrg_dalW4ICPrPo5AB8UnBOq2bcvtzdyF71sNSmT-9g",
+        "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6MSwidXNlcm5hbWUiOiJNIGFmaWZmdWRpbiBBbCBtYWhkaTI4IiwiZW1haWwiOiJtYWZpZmZ1ZGluMjhAZ21haWwuY29tIiwicm9sZSI6ImNhbXB1cyIsInZlcmlmIjp7InZlcmlmaWNhdGlvbl9zdGF0dXMiOiJhY2NlcHRlZCIsImNhbXB1c19uYW1lIjoiSU5TVElUVVQgVEVLTk9MT0dJIEJBVEFNIn0sImlhdCI6MTc4MjIwNDU1MiwiZXhwIjoxNzgyMjkwOTUyfQ.Wtf9cefgoKmjT8a7_E_2QITuMnOTX54qejm9RNvkcqc",
     },
   };
 
@@ -36,8 +35,12 @@ export default function () {
     "Status 200 (Berhasil diproses/masuk antrean)": (r) => r.status === 200,
     "Status 400 (Gagal validasi)": (r) => r.status === 400,
     "Status 500 (Error server)": (r) => r.status === 500,
+    "Temporary System Problem. IP temporarily blocked.": (r) =>
+      r.status === 421,
+    "Too many connections. Try again later.": (r) => r.status === 429,
     "Response time < 800ms": (r) => r.timings.duration < 800,
   });
 
-  sleep(1);
+  // Jeda dikurangi agar trafik lebih padat dan memicu error rate limit
+  sleep(0.1);
 }
