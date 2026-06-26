@@ -136,61 +136,52 @@ router.post(
 
     try {
       const getCampus = await prisma.campus.findFirst({
-        where: {
-          id: idCampus,
-        },
-        select: {
-          campus_name: true,
-          email: true,
-        },
+        where: { id: idCampus },
+        select: { campus_name: true, email: true },
       });
 
-      // 1. Gunakan timestamp agar unik dan ringkas
       const timestamp = Date.now();
       const invoiceNo = `INV-${timestamp}`;
       const transactionNo = `TRX-${timestamp}`;
 
+      // save invoice
+      const createTransaction = await prisma.transaction.create({
+        data: {
+          transaction_date: new Date(),
+          invoice_no: invoiceNo,
+          payment_channel: "qris",
+          status: "pending",
+          id_campus: idCampus,
+          transaction_no: transactionNo,
+          id_package: null,
+          free_trial: false,
+          amount_original: amount,
+          amount_final: 0,
+          duration_month: null,
+          paid_at: new Date(),
+          type_payment: "topup",
+        },
+      });
+
+      // payload paymentku
       const body = {
-        reference_id: invoiceNo, // Gunakan variabel yang sama
+        reference_id: invoiceNo,
         amount: Number(amount),
         customer_name: getCampus.campus_name,
         customer_email: getCampus.email,
         channel_code: "qris",
-        return_url: `${FE_BASE_URL}/dashboard-campus/berlangganan`,
+        return_url: `${process.env.FE_BASE_URL}/dashboard-campus/berlangganan`,
       };
 
+      // hit api paymentku
       const paymentkuResponse = await axios.post(
         "https://paymenku.com/api/v1/transaction/create",
         body,
         {
-          headers: {
-            Authorization: `Bearer ${API_KEY_PAYMENTKU}`,
-          },
+          headers: { Authorization: `Bearer ${process.env.API_KEY_PAYMENTKU}` },
         },
       );
 
-      // create transaction
-      if (paymentkuResponse) {
-        const createTransaction = await prisma.transaction.create({
-          data: {
-            transaction_date: new Date(),
-            invoice_no: invoiceNo,
-            payment_channel: "qris",
-            status: "pending",
-            id_campus: idCampus,
-            transaction_no: transactionNo,
-            id_package: null,
-            free_trial: false,
-            amount_original: amount,
-            amount_final: 0,
-            duration_month: null,
-            paid_at: new Date(),
-            type_payment: "topup",
-          },
-        });
-      }
-
-      // Selalu kirim status 200 agar Mayar tidak mengirim ulang webhook
       res.status(200).json({
         statusCode: 200,
         messages: "success",
@@ -206,15 +197,15 @@ router.post(
       if (error.response) {
         return res.status(error.response.status).json({
           statusCode: error.response.status,
-          messages: "Gagal membuat transaksi pembayaran",
+          messages: "Failed to create payment invoice",
           errors:
-            error.response.data.message || "Kesalahan pada penyedia pembayaran",
+            error.response.data.message || "Failed to create payment invoice",
         });
       } else if (error.request) {
         return res.status(503).json({
           statusCode: 503,
-          messages: "Layanan pembayaran tidak dapat dijangkau",
-          errors: "Koneksi ke payment gateway terputus.",
+          messages: "Payment service is unreachable",
+          errors: "Connection to payment gateway lost.",
         });
       } else {
         return res.status(500).json({
