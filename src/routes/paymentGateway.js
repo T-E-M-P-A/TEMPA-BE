@@ -43,13 +43,13 @@ router.post(
         },
       });
 
-      // 1. Gunakan timestamp agar unik dan ringkas
       const timestamp = Date.now();
       const invoiceNo = `INV-${timestamp}`;
       const transactionNo = `TRX-${timestamp}`;
 
+      // create payload
       const body = {
-        reference_id: invoiceNo, // Gunakan variabel yang sama
+        reference_id: invoiceNo,
         amount: Number(getSubscriptionPackage.price),
         customer_name: getCampus.campus_name,
         customer_email: getCampus.email,
@@ -88,7 +88,6 @@ router.post(
         });
       }
 
-      // Selalu kirim status 200 agar Mayar tidak mengirim ulang webhook
       res.status(200).json({
         statusCode: 200,
         messages: "success",
