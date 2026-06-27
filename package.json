@@ -31,10 +31,11 @@
   "description": "",
   "main": "app.js",
   "scripts": {
-  	"start": "node app.js",
+    "start": "node app.js",
     "test": "echo \"Error: no test specified\" && exit 1",
     "seed:mentor": "node prisma/seedMentor.js",
-    "seed:admin": "node prisma/seed.js"
+    "seed:admin": "node prisma/seed.js",
+    "seed:package": "node prisma/seedSubscriptionPackage.js"
   },
   "repository": {
     "type": "git",
