@@ -27,6 +27,7 @@ app.use(
       "http://localhost:5173",
       "https://tempa-fe.vercel.app",
       "https://api.tempa.biz.id",
+      "https://tempa.biz.id",
     ],
     methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     credentials: true,
