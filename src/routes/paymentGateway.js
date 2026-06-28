@@ -364,17 +364,6 @@ router.get(
         });
       }
 
-      if (!getSubscriptionCampus) {
-        return res.status(200).json({
-          statusCode: 200,
-          messages: "Kampus belum memiliki paket langganan aktif.",
-          data: {
-            balance: Number(getBalance.current_balance),
-            quota_mentee: 0,
-          },
-        });
-      }
-
       // price per mentee
       const menteePriceMap = {
         1: 15000, // Paket Berkembang
@@ -388,6 +377,17 @@ router.get(
         pricePerMentee > 0
           ? Math.floor(Number(getBalance.current_balance) / pricePerMentee)
           : 0;
+
+      if (!getSubscriptionCampus) {
+        return res.status(200).json({
+          statusCode: 200,
+          messages: "Kampus belum memiliki paket langganan aktif.",
+          data: {
+            balance: Number(getBalance.current_balance),
+            quota_mentee: totalQuota,
+          },
+        });
+      }
 
       const data = {
         balance: Number(getBalance.current_balance),
